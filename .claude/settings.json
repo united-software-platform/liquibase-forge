@@ -1,0 +1,13 @@
+{
+  "extraKnownMarketplaces": {
+    "formular": {
+      "source": {
+        "source": "github",
+        "repo": "united-software-platform/formular"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "backlog@formular": true
+  }
+}
