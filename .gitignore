@@ -2,3 +2,6 @@
 .env
 .ssh/
 .claude-accounts/
+
+# След операций formular: локальный, не коммитится
+backlog/*
