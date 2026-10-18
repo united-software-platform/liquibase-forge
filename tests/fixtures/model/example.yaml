@@ -1,0 +1,34 @@
+version: 1
+tables:
+  - name: customer
+    columns:
+      - name: id
+        type: uuid
+      - name: email
+        type: string
+        length: 255
+        nullable: false
+      - name: full_name
+        type: text
+      - name: created_at
+        type: timestamp_tz
+        nullable: false
+    primary_key: [id]
+  - name: invoice_line
+    columns:
+      - name: invoice_id
+        type: bigint
+      - name: line_no
+        type: integer
+      - name: amount
+        type: decimal
+        precision: 12
+        scale: 2
+        nullable: false
+      - name: is_paid
+        type: boolean
+      - name: due_date
+        type: date
+      - name: created_at
+        type: timestamp
+    primary_key: [invoice_id, line_no]
