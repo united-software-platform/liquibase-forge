@@ -18,11 +18,11 @@ from forge.migration.application.database import (
 )
 from forge.migration.application.liquibase_gateway import GatewayResult, LiquibaseGatewayInterface
 from forge.migration.application.operation_record import OperationRecordReaderInterface
-from forge.migration.application.result_writer import ResultWriterInterface
 from forge.migration.application.rollback_attempt.input import RollbackAttemptInput
 from forge.migration.application.rollback_attempt.output import CheckView, RollbackAttemptOutput
-from forge.migration.application.settings import TargetDatabaseSettingsInterface
-from forge.migration.domain.target_database import TargetDatabase
+from forge.shared.application.result_writer import ResultWriterInterface
+from forge.shared.application.settings import TargetDatabaseSettingsInterface
+from forge.shared.domain.target_database import TargetDatabase
 
 ACCEPTED_MASTER = "db/changelog/master.yaml"
 CHANGELOG = "changelog.yaml"

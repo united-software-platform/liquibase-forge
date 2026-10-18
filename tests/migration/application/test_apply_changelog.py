@@ -7,9 +7,9 @@ import pytest
 from forge.migration.application.apply_changelog.input import ApplyChangelogInput
 from forge.migration.application.apply_changelog.use_case import ApplyChangelogUseCase
 from forge.migration.application.liquibase_gateway import GatewayUnavailableError
-from forge.migration.application.settings import SettingsUnavailableError
-from forge.migration.domain.target_database import DatabaseNotAllowedError
-from forge.migration.infrastructure.environment import EnvironmentSettings
+from forge.shared.application.settings import SettingsUnavailableError
+from forge.shared.domain.target_database import DatabaseNotAllowedError
+from forge.shared.infrastructure.settings import EnvironmentSettings
 from tests.migration.fakes import FakeGateway, FakeSettings, FakeWriter
 
 CHANGELOG = "backlog/forge-model/20261017-153000/attempt-1/changelog.yaml"

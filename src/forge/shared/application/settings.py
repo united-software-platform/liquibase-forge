@@ -1,15 +1,19 @@
-"""Контракт настроек целевой БД: адрес, учётные данные и перечень тестовых БД."""
+"""Контракт настроек целевой БД: адрес, учётные данные, перечень тестовых БД и ошибки доступа."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Protocol
 
-from forge.migration.domain.target_database import TargetDatabase, TestDatabaseAllowlist
+from forge.shared.domain.target_database import TargetDatabase, TestDatabaseAllowlist
 
 
 class SettingsUnavailableError(Exception):
     """Настройки окружения не заданы или заданы неверно."""
+
+
+class DatabaseUnavailableError(Exception):
+    """К целевой БД или серверу не подключиться либо запрос не выполнен."""
 
 
 @dataclass(frozen=True)

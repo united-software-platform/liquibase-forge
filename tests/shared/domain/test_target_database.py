@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from forge.migration.domain.target_database import (
+from forge.shared.domain.target_database import (
     DatabaseNotAllowedError,
     InvalidAllowlistError,
     TargetDatabase,

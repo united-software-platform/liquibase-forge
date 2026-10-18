@@ -118,14 +118,14 @@ sequenceDiagram
 | `forge validate` | файл модели | перечень нарушений модели с путями | модель некорректна |
 | `forge generate` | модель попытки, принятая модель (нет файла — пустая), беклог операции (штамп), путь changelog | путь changelog и перечень changeset | модель некорректна или требует неаддитивных изменений |
 | `forge apply` | changelog, параметры БД из окружения | `apply.json` рядом с changelog: результат Liquibase | ошибка Liquibase |
-| `forge reconcile` | модель, changelog | `reconcile.json`: перечень расхождений | есть расхождения |
+| `forge reconcile` | модель, changelog, параметры БД из окружения | `reconcile.json` рядом с changelog: вердикт и перечень расхождений | есть расхождения |
 | `forge rollback` | беклог операции, номер попытки | `rollback.json` в каталоге попытки: что откатано и проверка возврата | возврат схемы не подтверждён |
 | `forge close` | беклог операции | статус операции; при `success` — пути в `db/` | — |
 | `forge report` | беклог операции | итоговый отчёт для LLM | статус операции `failure` |
 
 Целевая БД вне перечня тестовых, недоступный раннер или отказ шлюза — код `2`: это ошибка
 окружения, а не неуспех попытки, и попытка на ней не расходуется. Подробности наката и отката —
-в [migration.md](./migration.md).
+в [migration.md](./migration.md), сверки — в [reconciliation.md](./reconciliation.md).
 
 `forge rollback` после успешной сверки попытки ничего не меняет и возвращает `0`. Иначе он
 откатывает фактически применённые changeset попытки. Если Liquibase rollback не удался или записи
@@ -215,3 +215,4 @@ flowchart LR
 | 1.0.0 | 2026-10-16 | OpenSpec change `design-foundation` | Claude Code | Claude Opus 5.5 | Начальное создание: принцип разделения агента, CLI и беклога, компоненты, поток операции, последовательность попытки, контракт команд CLI `forge`, раскладка следа и `db/`, ограничения и риски |
 | 1.0.1 | 2026-10-18 | OpenSpec change `forge-environment` | Claude Code | Claude Opus 5.5 | Добавлен раздел «Окружение исполнения» со схемой «агент → раннер → `lbfr-liquibase` → PostgreSQL», обменом через файлы `.forge/`, проверками шлюза и сетями БД; в таблицу компонентов добавлены раннер и `lbfr-liquibase`, строка PostgreSQL дополнена сервером `lbfr-db-test` |
 | 1.0.2 | 2026-10-18 | OpenSpec change `forge-migration` | Claude Code | Claude Opus 5.5 | Контракт `forge generate` дополнен беклогом операции и путём changelog; у `forge apply` БД вне перечня тестовых перенесена из кода `1` в код `2` — ошибку окружения, при которой попытка не расходуется; уточнены места `apply.json` и `rollback.json`, условие запасного пути отката; добавлена ссылка на `migration.md` |
+| 1.0.3 | 2026-10-18 | OpenSpec change `forge-reconciliation` | Claude Code | Claude Opus 5.5 | Контракт `forge reconcile` дополнен параметрами БД из окружения и местом `reconcile.json`; добавлена ссылка на `reconciliation.md` |

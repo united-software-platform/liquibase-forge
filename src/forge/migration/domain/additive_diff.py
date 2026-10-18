@@ -9,7 +9,6 @@ from forge.migration.domain.changes import (
     NonAdditiveChangeError,
     SchemaChange,
 )
-from forge.modeling.domain.column_type import ColumnType
 from forge.modeling.domain.data_model import DataModel
 from forge.modeling.domain.table import Table
 
@@ -77,8 +76,7 @@ def _table_changes(accepted: Table, attempt: Table) -> list[NonAdditiveChange]:
                     "column_type_changed",
                     table,
                     name,
-                    f"тип колонки {table}.{name} изменён: {_type(column.type)} → "
-                    f"{_type(changed.type)}",
+                    f"тип колонки {table}.{name} изменён: {column.type} → {changed.type}",
                 )
             )
         before, after = accepted.is_nullable(column.name), attempt.is_nullable(column.name)
@@ -102,12 +100,6 @@ def _table_changes(accepted: Table, attempt: Table) -> list[NonAdditiveChange]:
             )
         )
     return rejected
-
-
-def _type(column_type: ColumnType) -> str:
-    parameters = [str(value) for value in column_type.parameters().values() if value is not None]
-    suffix = f"({', '.join(parameters)})" if parameters else ""
-    return f"{column_type.kind.value}{suffix}"
 
 
 def _nullable(nullable: bool) -> str:

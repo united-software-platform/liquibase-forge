@@ -13,7 +13,7 @@ from forge.cli.commands import apply
 from forge.cli.main import main
 from forge.migration.application.apply_changelog.use_case import ApplyChangelogUseCase
 from forge.migration.application.liquibase_gateway import GatewayUnavailableError
-from forge.migration.infrastructure.json_result_writer import JsonResultWriter
+from forge.shared.infrastructure.json_result_writer import JsonResultWriter
 from tests.migration.fakes import FakeGateway, FakeSettings
 
 

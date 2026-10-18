@@ -5,15 +5,15 @@ from __future__ import annotations
 import psycopg
 import pytest
 
-from forge.migration.application.database import DatabaseUnavailableError, JournalEntry
-from forge.migration.application.settings import DatabaseCredentials
-from forge.migration.domain.target_database import TargetDatabase
+from forge.migration.application.database import JournalEntry
 from forge.migration.infrastructure.postgres import (
-    PostgresConnector,
     PsycopgDatabaseRecreator,
     PsycopgJournalReader,
     PsycopgSchemaProbe,
 )
+from forge.shared.application.settings import DatabaseCredentials, DatabaseUnavailableError
+from forge.shared.domain.target_database import TargetDatabase
+from forge.shared.infrastructure.postgres import PostgresConnector
 from tests.conftest import TestDatabase
 
 pytestmark = pytest.mark.integration

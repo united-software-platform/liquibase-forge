@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from forge.migration.application.liquibase_gateway import GatewayResult, GatewayUnavailableError
-from forge.migration.domain.target_database import TargetDatabase
+from forge.shared.domain.target_database import TargetDatabase
 
 REQUEST_PATH = Path(".forge") / "liquibase-request.json"
 RESULT_PATH = Path(".forge") / "liquibase-result.json"

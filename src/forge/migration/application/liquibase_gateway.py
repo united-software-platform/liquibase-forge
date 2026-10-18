@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-from forge.migration.domain.target_database import TargetDatabase
+from forge.shared.domain.target_database import TargetDatabase
 
 
 @dataclass(frozen=True)

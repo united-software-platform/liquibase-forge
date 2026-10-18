@@ -12,7 +12,6 @@ from typing import Any
 import pytest
 
 from forge.migration.application.liquibase_gateway import GatewayUnavailableError
-from forge.migration.domain.target_database import TargetDatabase
 from forge.migration.infrastructure.runner_gateway import (
     REQUEST_PATH,
     RESULT_PATH,
@@ -20,6 +19,7 @@ from forge.migration.infrastructure.runner_gateway import (
     RunnerSettings,
     call_runner,
 )
+from forge.shared.domain.target_database import TargetDatabase
 
 DATABASE = TargetDatabase("lbfr-db-test", 5432, "t_0001")
 RUNNER = RunnerSettings("http://runner:11920", "secret")

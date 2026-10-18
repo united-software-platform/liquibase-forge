@@ -107,3 +107,22 @@ def test_several_violations_of_one_type_are_reported_together() -> None:
         ("precision", "unexpected_type_parameter"),
         ("length", "type_parameter_out_of_range"),
     ]
+
+
+@pytest.mark.parametrize(
+    ("name", "parameters", "text"),
+    [
+        ("integer", {}, "integer"),
+        ("bigint", {}, "bigint"),
+        ("boolean", {}, "boolean"),
+        ("string", {"length": 255}, "string(255)"),
+        ("text", {}, "text"),
+        ("decimal", {"precision": 12, "scale": 2}, "decimal(12, 2)"),
+        ("date", {}, "date"),
+        ("timestamp", {}, "timestamp"),
+        ("timestamp_tz", {}, "timestamp_tz"),
+        ("uuid", {}, "uuid"),
+    ],
+)
+def test_text_form(name: str, parameters: dict[str, int], text: str) -> None:
+    assert str(parse_column_type(name, **parameters)) == text

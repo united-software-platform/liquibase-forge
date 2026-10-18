@@ -12,7 +12,7 @@ from forge.migration.application.rollback_attempt.use_case import (
     RollbackAttemptUseCase,
     RollbackDependencies,
 )
-from forge.migration.domain.target_database import DatabaseNotAllowedError, TargetDatabase
+from forge.shared.domain.target_database import DatabaseNotAllowedError, TargetDatabase
 from tests.migration.fakes import (
     LOGICAL,
     FakeDatabase,

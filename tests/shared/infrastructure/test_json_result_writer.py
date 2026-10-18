@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from forge.migration.infrastructure.json_result_writer import JsonResultWriter
+from forge.shared.infrastructure.json_result_writer import JsonResultWriter
 
 
 def test_document_is_written_atomically(tmp_path: Path) -> None:

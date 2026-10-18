@@ -16,11 +16,11 @@ from forge.migration.application.rollback_attempt.use_case import (
     RollbackAttemptUseCase,
     RollbackDependencies,
 )
-from forge.migration.domain.target_database import TargetDatabase
-from forge.migration.infrastructure.json_result_writer import JsonResultWriter
 from forge.migration.infrastructure.operation_record_reader import (
     FrontmatterOperationRecordReader,
 )
+from forge.shared.domain.target_database import TargetDatabase
+from forge.shared.infrastructure.json_result_writer import JsonResultWriter
 from tests.migration.fakes import FakeDatabase, FakeSettings
 from tests.migration.operation_backlog import write_operation
 

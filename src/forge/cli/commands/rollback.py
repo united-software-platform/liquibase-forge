@@ -7,7 +7,6 @@ import os
 from pathlib import Path
 
 from forge.cli.contract import ExitCode, emit, environment_error
-from forge.migration.application.database import DatabaseUnavailableError
 from forge.migration.application.liquibase_gateway import GatewayUnavailableError
 from forge.migration.application.operation_record import OperationRecordUnavailableError
 from forge.migration.application.rollback_attempt.input import RollbackAttemptInput
@@ -16,21 +15,25 @@ from forge.migration.application.rollback_attempt.use_case import (
     RollbackAttemptUseCaseInterface,
     RollbackDependencies,
 )
-from forge.migration.application.settings import SettingsUnavailableError
-from forge.migration.domain.target_database import DatabaseNotAllowedError
-from forge.migration.infrastructure.environment import EnvironmentSettings
-from forge.migration.infrastructure.json_result_writer import JsonResultWriter
+from forge.migration.infrastructure.environment import runner_settings
 from forge.migration.infrastructure.liquibase_changelog import LiquibaseYamlChangelogReader
 from forge.migration.infrastructure.operation_record_reader import (
     FrontmatterOperationRecordReader,
 )
 from forge.migration.infrastructure.postgres import (
-    PostgresConnector,
     PsycopgDatabaseRecreator,
     PsycopgJournalReader,
     PsycopgSchemaProbe,
 )
 from forge.migration.infrastructure.runner_gateway import RunnerLiquibaseGateway
+from forge.shared.application.settings import (
+    DatabaseUnavailableError,
+    SettingsUnavailableError,
+)
+from forge.shared.domain.target_database import DatabaseNotAllowedError
+from forge.shared.infrastructure.json_result_writer import JsonResultWriter
+from forge.shared.infrastructure.postgres import PostgresConnector
+from forge.shared.infrastructure.settings import EnvironmentSettings
 
 ATTEMPTS = (1, 2, 3)
 
@@ -55,7 +58,7 @@ def build_use_case() -> RollbackAttemptUseCaseInterface:
             journal=PsycopgJournalReader(connector),
             schema=PsycopgSchemaProbe(connector),
             recreator=PsycopgDatabaseRecreator(connector),
-            gateway=RunnerLiquibaseGateway(Path.cwd(), settings.runner()),
+            gateway=RunnerLiquibaseGateway(Path.cwd(), runner_settings(os.environ)),
             writer=JsonResultWriter(),
         )
     )

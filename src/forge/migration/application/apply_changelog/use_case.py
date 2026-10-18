@@ -8,8 +8,8 @@ from typing import Protocol
 from forge.migration.application.apply_changelog.input import ApplyChangelogInput
 from forge.migration.application.apply_changelog.output import ApplyChangelogOutput
 from forge.migration.application.liquibase_gateway import LiquibaseGatewayInterface
-from forge.migration.application.result_writer import ResultWriterInterface
-from forge.migration.application.settings import TargetDatabaseSettingsInterface
+from forge.shared.application.result_writer import ResultWriterInterface
+from forge.shared.application.settings import TargetDatabaseSettingsInterface
 
 APPLY_RESULT = "apply.json"
 

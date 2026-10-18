@@ -13,9 +13,9 @@ from forge.migration.application.changelog_storage import (
 from forge.migration.application.database import JournalEntry
 from forge.migration.application.liquibase_gateway import GatewayResult, GatewayUnavailableError
 from forge.migration.application.operation_record import OperationRecord
-from forge.migration.application.settings import DatabaseCredentials
 from forge.migration.domain.stamp import OperationStamp
-from forge.migration.domain.target_database import (
+from forge.shared.application.settings import DatabaseCredentials
+from forge.shared.domain.target_database import (
     TargetDatabase,
     TestDatabaseAllowlist,
     parse_allowlist,

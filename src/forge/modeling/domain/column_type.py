@@ -53,6 +53,11 @@ class ColumnType:
         if violations:
             raise ModelViolationError(violations)
 
+    def __str__(self) -> str:
+        """Тип в записи формата: `string(255)`, `decimal(12, 2)`, `uuid`."""
+        values = [str(value) for value in self.parameters().values() if value is not None]
+        return f"{self.kind.value}({', '.join(values)})" if values else self.kind.value
+
     def parameters(self) -> dict[str, int | None]:
         """Параметры типа по именам полей файла модели."""
         return {"length": self.length, "precision": self.precision, "scale": self.scale}
