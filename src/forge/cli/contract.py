@@ -37,3 +37,10 @@ def error_payload(kind: str, message: str, **details: Any) -> dict[str, Any]:
     error: dict[str, Any] = {"kind": kind, "message": message}
     error.update(details)
     return {"error": error}
+
+
+def environment_error(kind: str, message: str, **details: Any) -> ExitCode:
+    """Сообщить об ошибке вызова или окружения: диагностика в stderr, JSON в stdout, код `2`."""
+    sys.stderr.write(f"forge: {message}\n")
+    emit(error_payload(kind, message, **details))
+    return ExitCode.ENVIRONMENT_ERROR

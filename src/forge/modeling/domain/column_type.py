@@ -53,25 +53,6 @@ class ColumnType:
         if violations:
             raise ModelViolationError(violations)
 
-    @classmethod
-    def of(
-        cls,
-        name: str,
-        *,
-        length: int | None = None,
-        precision: int | None = None,
-        scale: int | None = None,
-    ) -> ColumnType:
-        """Построить тип по имени из файла модели."""
-        try:
-            kind = TypeKind(name)
-        except ValueError:
-            allowed = ", ".join(kind.value for kind in TypeKind)
-            raise ModelViolationError(
-                [Violation("type", "unknown_type", f"тип {name!r} не входит в перечень: {allowed}")]
-            ) from None
-        return cls(kind, length=length, precision=precision, scale=scale)
-
     def parameters(self) -> dict[str, int | None]:
         """Параметры типа по именам полей файла модели."""
         return {"length": self.length, "precision": self.precision, "scale": self.scale}
@@ -110,3 +91,21 @@ def _range(name: str, value: int | None, low: int, high: int) -> list[Violation]
             f"{name} должен быть от {low} до {high}, получено {value}",
         )
     ]
+
+
+def parse_column_type(
+    name: str,
+    *,
+    length: int | None = None,
+    precision: int | None = None,
+    scale: int | None = None,
+) -> ColumnType:
+    """Построить тип по имени из файла модели; неизвестное имя — нарушение `unknown_type`."""
+    try:
+        kind = TypeKind(name)
+    except ValueError:
+        allowed = ", ".join(kind.value for kind in TypeKind)
+        raise ModelViolationError(
+            [Violation("type", "unknown_type", f"тип {name!r} не входит в перечень: {allowed}")]
+        ) from None
+    return ColumnType(kind, length=length, precision=precision, scale=scale)

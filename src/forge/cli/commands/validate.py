@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import argparse
-import sys
 from typing import Any
 
-from forge.cli.contract import ExitCode, emit, error_payload
+from forge.cli.contract import ExitCode, emit, environment_error
 from forge.modeling.application.model_reading import ModelUnreadableError
 from forge.modeling.application.validate_model.input import ValidateModelInput
 from forge.modeling.application.validate_model.output import ValidateModelOutput
@@ -36,9 +35,7 @@ def run(args: argparse.Namespace, use_case: ValidateModelUseCaseInterface | None
     try:
         output = (use_case or build_use_case()).execute(ValidateModelInput(model_path))
     except ModelUnreadableError as error:
-        sys.stderr.write(f"forge: {error}\n")
-        emit(error_payload("model_unreadable", str(error), model=error.path))
-        return ExitCode.ENVIRONMENT_ERROR
+        return environment_error("model_unreadable", str(error), model=error.path)
     emit(_payload(output))
     return ExitCode.SUCCESS if output.valid else ExitCode.FAILURE
 

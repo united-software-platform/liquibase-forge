@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from forge.modeling.domain.column import Column
-from forge.modeling.domain.column_type import ColumnType
+from forge.modeling.domain.column_type import parse_column_type
 from forge.modeling.domain.identifier import ColumnName, TableName
 from forge.modeling.domain.primary_key import PrimaryKey
 from forge.modeling.domain.table import Table
@@ -13,7 +13,7 @@ from forge.modeling.domain.violation import ModelViolationError
 
 
 def _column(name: str, nullable: bool | None = None, type_name: str = "integer") -> Column:
-    return Column(ColumnName(name), ColumnType.of(type_name), nullable)
+    return Column(ColumnName(name), parse_column_type(type_name), nullable)
 
 
 def _key(*names: str) -> PrimaryKey:
@@ -32,7 +32,7 @@ def test_valid_table() -> None:
     )
 
     assert [column.name.value for column in table.columns] == ["id", "email"]
-    assert table.column(ColumnName("email")).type == ColumnType.of("text")
+    assert table.column(ColumnName("email")).type == parse_column_type("text")
 
 
 def test_primary_key_column_without_nullable_is_not_null() -> None:

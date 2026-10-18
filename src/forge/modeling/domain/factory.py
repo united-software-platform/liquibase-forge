@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from forge.modeling.domain.column import Column
-from forge.modeling.domain.column_type import ColumnType
+from forge.modeling.domain.column_type import ColumnType, parse_column_type
 from forge.modeling.domain.data_model import DataModel
 from forge.modeling.domain.draft import ColumnDraft, DataModelDraft, TableDraft
 from forge.modeling.domain.identifier import ColumnName, TableName
@@ -82,7 +82,7 @@ class DataModelFactory:
             violations += error.under("name").violations
         column_type: ColumnType | None = None
         try:
-            column_type = ColumnType.of(
+            column_type = parse_column_type(
                 draft.type, length=draft.length, precision=draft.precision, scale=draft.scale
             )
         except ModelViolationError as error:

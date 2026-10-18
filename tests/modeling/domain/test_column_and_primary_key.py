@@ -7,7 +7,7 @@ import dataclasses
 import pytest
 
 from forge.modeling.domain.column import Column
-from forge.modeling.domain.column_type import ColumnType
+from forge.modeling.domain.column_type import parse_column_type
 from forge.modeling.domain.identifier import ColumnName
 from forge.modeling.domain.primary_key import PrimaryKey
 from forge.modeling.domain.violation import ModelViolationError
@@ -19,13 +19,13 @@ def _names(*values: str) -> tuple[ColumnName, ...]:
 
 @pytest.mark.parametrize("nullable", [True, False, None])
 def test_column_keeps_declared_nullable(nullable: bool | None) -> None:
-    column = Column(ColumnName("email"), ColumnType.of("text"), nullable)
+    column = Column(ColumnName("email"), parse_column_type("text"), nullable)
 
     assert column.nullable is nullable
 
 
 def test_column_is_immutable() -> None:
-    column = Column(ColumnName("id"), ColumnType.of("uuid"))
+    column = Column(ColumnName("id"), parse_column_type("uuid"))
 
     with pytest.raises(dataclasses.FrozenInstanceError):
         column.nullable = False  # type: ignore[misc]

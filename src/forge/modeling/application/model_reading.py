@@ -34,6 +34,13 @@ class ModelUnreadableError(Exception):
         self.reason = reason
 
 
+class ModelNotFoundError(ModelUnreadableError):
+    """Файла модели нет."""
+
+    def __init__(self, path: str) -> None:
+        super().__init__(path, "файла нет")
+
+
 class ModelDraftReaderInterface(Protocol):
     """Чтение файла модели и проверка его структуры."""
 

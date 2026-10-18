@@ -15,7 +15,11 @@ from pathlib import Path
 import yaml
 from yaml.nodes import MappingNode, Node, ScalarNode, SequenceNode
 
-from forge.modeling.application.model_reading import DraftReading, ModelUnreadableError
+from forge.modeling.application.model_reading import (
+    DraftReading,
+    ModelNotFoundError,
+    ModelUnreadableError,
+)
 from forge.modeling.domain.data_model import FORMAT_VERSION
 from forge.modeling.domain.draft import ColumnDraft, DataModelDraft, TableDraft
 from forge.modeling.domain.violation import Violation, join_path
@@ -50,7 +54,7 @@ def _read_text(path: str) -> str:
     try:
         return Path(path).read_text(encoding="utf-8")
     except FileNotFoundError:
-        raise ModelUnreadableError(path, "файла нет") from None
+        raise ModelNotFoundError(path) from None
     except IsADirectoryError:
         raise ModelUnreadableError(path, "это каталог") from None
     except UnicodeDecodeError as error:

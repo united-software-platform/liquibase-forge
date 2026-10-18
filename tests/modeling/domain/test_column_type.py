@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from forge.modeling.domain.column_type import ColumnType, TypeKind
+from forge.modeling.domain.column_type import TypeKind, parse_column_type
 from forge.modeling.domain.violation import ModelViolationError
 
 
@@ -16,7 +16,7 @@ def _violations(
     scale: int | None = None,
 ) -> list[tuple[str, str]]:
     with pytest.raises(ModelViolationError) as caught:
-        ColumnType.of(name, length=length, precision=precision, scale=scale)
+        parse_column_type(name, length=length, precision=precision, scale=scale)
     return [(v.path, v.code) for v in caught.value.violations]
 
 
@@ -24,7 +24,7 @@ def _violations(
     "name", ["integer", "bigint", "boolean", "text", "date", "timestamp", "timestamp_tz", "uuid"]
 )
 def test_type_without_parameters(name: str) -> None:
-    column_type = ColumnType.of(name)
+    column_type = parse_column_type(name)
 
     assert column_type.kind == TypeKind(name)
     assert column_type.parameters() == {"length": None, "precision": None, "scale": None}
@@ -46,23 +46,23 @@ def test_all_ten_types_are_listed() -> None:
 
 
 def test_string_with_length() -> None:
-    assert ColumnType.of("string", length=255).length == 255
+    assert parse_column_type("string", length=255).length == 255
 
 
 @pytest.mark.parametrize("length", [1, 10_485_760])
 def test_string_length_bounds(length: int) -> None:
-    assert ColumnType.of("string", length=length).length == length
+    assert parse_column_type("string", length=length).length == length
 
 
 def test_decimal_with_precision_and_scale() -> None:
-    column_type = ColumnType.of("decimal", precision=12, scale=2)
+    column_type = parse_column_type("decimal", precision=12, scale=2)
 
     assert (column_type.precision, column_type.scale) == (12, 2)
 
 
 @pytest.mark.parametrize(("precision", "scale"), [(1, 0), (1000, 1000), (5, 5)])
 def test_decimal_bounds(precision: int, scale: int) -> None:
-    assert ColumnType.of("decimal", precision=precision, scale=scale).scale == scale
+    assert parse_column_type("decimal", precision=precision, scale=scale).scale == scale
 
 
 def test_unknown_type() -> None:

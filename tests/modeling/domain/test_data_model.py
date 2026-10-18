@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from forge.modeling.domain.column import Column
-from forge.modeling.domain.column_type import ColumnType
+from forge.modeling.domain.column_type import parse_column_type
 from forge.modeling.domain.data_model import DataModel
 from forge.modeling.domain.identifier import ColumnName, TableName
 from forge.modeling.domain.primary_key import PrimaryKey
@@ -16,7 +16,7 @@ from forge.modeling.domain.violation import ModelViolationError
 def _table(name: str) -> Table:
     return Table(
         TableName(name),
-        (Column(ColumnName("id"), ColumnType.of("bigint")),),
+        (Column(ColumnName("id"), parse_column_type("bigint")),),
         PrimaryKey((ColumnName("id"),)),
     )
 

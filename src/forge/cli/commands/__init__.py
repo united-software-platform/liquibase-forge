@@ -7,6 +7,6 @@
 
 from __future__ import annotations
 
-from forge.cli.commands import validate
+from forge.cli.commands import apply, generate, rollback, validate
 
-COMMANDS = (validate,)
+COMMANDS = (validate, generate, apply, rollback)
