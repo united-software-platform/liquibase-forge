@@ -62,3 +62,38 @@ def test_unknown_verdict_value(tmp_path: Path) -> None:
 
     with pytest.raises(OperationRecordUnavailableError):
         FrontmatterOperationRecordReader().read(str(path))
+
+
+def test_attempt_directory_from_trail_block(tmp_path: Path) -> None:
+    path = write_operation(tmp_path)
+    text = path.read_text(encoding="utf-8").replace(
+        "status: running\n",
+        "status: running\ntrail:\n"
+        "  attempt_1: backlog/forge-model/x/attempt-1\n"
+        "  attempt_2: backlog/forge-model/x/attempt-2\n"
+        "  attempt_3: backlog/forge-model/x/attempt-3\n",
+    )
+    path.write_text(text, encoding="utf-8")
+
+    record = FrontmatterOperationRecordReader().read(str(path))
+
+    assert record.attempt_directory(2) == "backlog/forge-model/x/attempt-2"
+
+
+def test_attempt_directory_without_trail_block_follows_layout(tmp_path: Path) -> None:
+    record = FrontmatterOperationRecordReader().read(str(write_operation(tmp_path)))
+
+    assert record.attempt_directory(3) == f"{tmp_path.as_posix()}/attempt-3"
+
+
+def test_trail_value_must_be_path(tmp_path: Path) -> None:
+    path = write_operation(tmp_path)
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "status: running\n", "status: running\ntrail: x\n"
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(OperationRecordUnavailableError):
+        FrontmatterOperationRecordReader().read(str(path))

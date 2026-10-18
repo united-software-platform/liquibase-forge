@@ -1,0 +1,32 @@
+# Changelog операции 20261018-235648: построен forge generate, вручную не правится
+databaseChangeLog:
+- changeSet:
+    id: 20261018-235648-01
+    author: forge
+    logicalFilePath: db/changelog/20261018-235648.yaml
+    changes:
+    - createTable:
+        tableName: customer
+        columns:
+        - column:
+            name: id
+            type: UUID
+            constraints:
+              nullable: false
+        - column:
+            name: email
+            type: VARCHAR(255)
+            constraints:
+              nullable: false
+        - column:
+            name: full_name
+            type: TEXT
+        - column:
+            name: registered_at
+            type: TIMESTAMP WITH TIME ZONE
+            constraints:
+              nullable: false
+    - addPrimaryKey:
+        tableName: customer
+        columnNames: id
+        constraintName: pk_customer

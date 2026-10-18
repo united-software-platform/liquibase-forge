@@ -1,4 +1,4 @@
-<!-- template_version: 1.0.0 -->
+<!-- template_version: 1.1.0 -->
 ---
 template_version: "{{template_version}}"
 generated: "{{date}}"
@@ -17,6 +17,7 @@ confirmed:
   close: null
 {{/^auto}}
 status: running
+stop_reason: null
 verdict:
   attempt_1: null
   attempt_2: null
@@ -25,6 +26,10 @@ backlog:
   attempt_1: null
   attempt_2: null
   attempt_3: null
+trail:
+  attempt_1: backlog/forge-model/{{subject}}/attempt-1
+  attempt_2: backlog/forge-model/{{subject}}/attempt-2
+  attempt_3: backlog/forge-model/{{subject}}/attempt-3
 ---
 
 # Операция построения модели {{subject}}
@@ -45,9 +50,12 @@ backlog:
 не пересказывается (BKL-008; текст нормы — `backlog norms --rule BKL-008`). Указатель носителя несёт
 и фронтматтер значением `runner`. Тот же носитель исполняет каждый беклог попытки.
 
-Отказ владельца или непройденный гейт в беклоге попытки прекращает и этот беклог: записать
-во фронтматтер `status: stopped` и остановиться. Попытка при этом не расходуется, повторный
-вызов продолжает с задачи, признак которой не выполнен.
+Отказ владельца, непройденный гейт и код `2` любой команды `forge` — здесь или в беклоге
+попытки — прекращают и этот беклог: вызвать
+`forge stop --operation backlog/forge-model/{{subject}}/tasks.md --reason <причина>`, где причина —
+отказ, решение гейта либо диагностика команды, и остановиться. Статус операции правит только
+CLI `forge`. Попытка при этом не расходуется, повторный вызов навыка `forge` продолжает
+с задачи, признак которой не выполнен.
 
 ---
 

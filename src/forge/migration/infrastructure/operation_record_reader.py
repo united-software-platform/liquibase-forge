@@ -1,7 +1,8 @@
 """Чтение записи об операции из фронтматтера беклога операции.
 
-Anti-Corruption Layer к беклогу контекста Операция: из фронтматтера берутся только
-`subject` и `verdict.attempt_N`, каталог следа — каталог беклога по раскладке следа.
+Anti-Corruption Layer к беклогу контекста Операция: из фронтматтера берутся только `subject`,
+`verdict.attempt_N` и `trail.attempt_N`. Беклог без блока `trail` (шаблон 1.0.0) получает
+каталоги попыток по раскладке следа.
 """
 
 from __future__ import annotations
@@ -41,6 +42,7 @@ class FrontmatterOperationRecordReader:
             stamp=stamp,
             verdicts={attempt: _verdict(path, frontmatter, attempt) for attempt in ATTEMPTS},
             trail_directory=str(PurePosixPath(path).parent),
+            attempt_directories=_trail(path, frontmatter),
         )
 
 
@@ -71,3 +73,22 @@ def _verdict(path: str, frontmatter: dict[str, Any], attempt: int) -> str | None
             f"или null, получено {value!r}"
         )
     return value
+
+
+def _trail(path: str, frontmatter: dict[str, Any]) -> dict[int, str]:
+    trail = frontmatter.get("trail")
+    if trail is None:
+        return {}
+    if not isinstance(trail, dict):
+        raise OperationRecordUnavailableError(f"беклог операции {path}: trail не отображение")
+    directories: dict[int, str] = {}
+    for attempt in ATTEMPTS:
+        value = trail.get(f"attempt_{attempt}")
+        if value is None:
+            continue
+        if not isinstance(value, str) or not value:
+            raise OperationRecordUnavailableError(
+                f"беклог операции {path}: trail.attempt_{attempt} должен быть путём каталога"
+            )
+        directories[attempt] = value
+    return directories

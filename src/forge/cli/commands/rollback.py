@@ -15,7 +15,6 @@ from forge.migration.application.rollback_attempt.use_case import (
     RollbackAttemptUseCaseInterface,
     RollbackDependencies,
 )
-from forge.migration.infrastructure.environment import runner_settings
 from forge.migration.infrastructure.liquibase_changelog import LiquibaseYamlChangelogReader
 from forge.migration.infrastructure.operation_record_reader import (
     FrontmatterOperationRecordReader,
@@ -33,6 +32,7 @@ from forge.shared.application.settings import (
 from forge.shared.domain.target_database import DatabaseNotAllowedError
 from forge.shared.infrastructure.json_result_writer import JsonResultWriter
 from forge.shared.infrastructure.postgres import PostgresConnector
+from forge.shared.infrastructure.runner import runner_settings
 from forge.shared.infrastructure.settings import EnvironmentSettings
 
 ATTEMPTS = (1, 2, 3)

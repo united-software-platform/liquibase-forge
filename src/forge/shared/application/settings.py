@@ -16,6 +16,10 @@ class DatabaseUnavailableError(Exception):
     """К целевой БД или серверу не подключиться либо запрос не выполнен."""
 
 
+class RunnerUnavailableError(Exception):
+    """Раннер на хосте не отвечает или отклонил цель."""
+
+
 @dataclass(frozen=True)
 class DatabaseCredentials:
     """Учётные данные целевой БД для прямого подключения."""

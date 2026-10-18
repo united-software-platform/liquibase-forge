@@ -14,11 +14,11 @@ from forge.migration.application.apply_changelog.use_case import (
     ApplyChangelogUseCaseInterface,
 )
 from forge.migration.application.liquibase_gateway import GatewayUnavailableError
-from forge.migration.infrastructure.environment import runner_settings
 from forge.migration.infrastructure.runner_gateway import RunnerLiquibaseGateway
 from forge.shared.application.settings import SettingsUnavailableError
 from forge.shared.domain.target_database import DatabaseNotAllowedError
 from forge.shared.infrastructure.json_result_writer import JsonResultWriter
+from forge.shared.infrastructure.runner import runner_settings
 from forge.shared.infrastructure.settings import EnvironmentSettings
 
 

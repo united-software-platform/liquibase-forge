@@ -7,6 +7,17 @@
 
 from __future__ import annotations
 
-from forge.cli.commands import apply, generate, reconcile, rollback, validate
+from forge.cli.commands import (
+    apply,
+    close,
+    generate,
+    reconcile,
+    report,
+    resume,
+    rollback,
+    status,
+    stop,
+    validate,
+)
 
-COMMANDS = (validate, generate, apply, reconcile, rollback)
+COMMANDS = (validate, generate, apply, reconcile, rollback, status, stop, resume, close, report)

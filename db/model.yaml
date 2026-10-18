@@ -1,0 +1,16 @@
+version: 1
+tables:
+  - name: customer
+    columns:
+      - name: id
+        type: uuid
+      - name: email
+        type: string
+        length: 255
+        nullable: false
+      - name: full_name
+        type: text
+      - name: registered_at
+        type: timestamp_tz
+        nullable: false
+    primary_key: [id]

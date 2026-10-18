@@ -8,50 +8,18 @@
 from __future__ import annotations
 
 import json
-import urllib.error
-import urllib.request
 import uuid
 from collections.abc import Callable
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from forge.migration.application.liquibase_gateway import GatewayResult, GatewayUnavailableError
+from forge.shared.application.settings import RunnerUnavailableError
 from forge.shared.domain.target_database import TargetDatabase
+from forge.shared.infrastructure.runner import RunnerCall, RunnerSettings, call_runner
 
 REQUEST_PATH = Path(".forge") / "liquibase-request.json"
 RESULT_PATH = Path(".forge") / "liquibase-result.json"
-DEFAULT_TIMEOUT = 900.0
-
-
-@dataclass(frozen=True)
-class RunnerSettings:
-    """Адрес и токен раннера, предел ожидания одной цели в секундах."""
-
-    url: str
-    token: str
-    timeout: float = DEFAULT_TIMEOUT
-
-
-RunnerCall = Callable[[RunnerSettings, str], None]
-
-
-def call_runner(settings: RunnerSettings, target: str) -> None:
-    """Вызвать цель раннера и дождаться её завершения; сбой — `GatewayUnavailableError`."""
-    request = urllib.request.Request(
-        f"{settings.url.rstrip('/')}/run/{target}", headers={"X-Runner-Token": settings.token}
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=settings.timeout) as response:
-            response.read()
-    except urllib.error.HTTPError as error:
-        raise GatewayUnavailableError(
-            "runner_unavailable", f"раннер отклонил цель {target}: HTTP {error.code}"
-        ) from None
-    except (urllib.error.URLError, OSError) as error:
-        raise GatewayUnavailableError(
-            "runner_unavailable", f"раннер {settings.url} недоступен: {error}"
-        ) from None
 
 
 class RunnerLiquibaseGateway:
@@ -96,7 +64,10 @@ class RunnerLiquibaseGateway:
         request_path = self._root / REQUEST_PATH
         request_path.parent.mkdir(parents=True, exist_ok=True)
         request_path.write_text(json.dumps(request, ensure_ascii=False), encoding="utf-8")
-        self._call(self._runner, f"liquibase-{action}")
+        try:
+            self._call(self._runner, f"liquibase-{action}")
+        except RunnerUnavailableError as error:
+            raise GatewayUnavailableError("runner_unavailable", str(error)) from None
         return self._result(request_id)
 
     def _relative(self, changelog: str) -> str:

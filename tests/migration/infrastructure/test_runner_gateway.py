@@ -3,9 +3,6 @@
 from __future__ import annotations
 
 import json
-import threading
-from collections.abc import Iterator
-from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import Any
 
@@ -16,10 +13,10 @@ from forge.migration.infrastructure.runner_gateway import (
     REQUEST_PATH,
     RESULT_PATH,
     RunnerLiquibaseGateway,
-    RunnerSettings,
-    call_runner,
 )
+from forge.shared.application.settings import RunnerUnavailableError
 from forge.shared.domain.target_database import TargetDatabase
+from forge.shared.infrastructure.runner import RunnerSettings
 
 DATABASE = TargetDatabase("lbfr-db-test", 5432, "t_0001")
 RUNNER = RunnerSettings("http://runner:11920", "secret")
@@ -143,37 +140,13 @@ def test_runner_not_configured(tmp_path: Path) -> None:
     assert caught.value.kind == "runner_unavailable"
 
 
-class _Handler(BaseHTTPRequestHandler):
-    def do_GET(self) -> None:
-        status = 200 if self.headers.get("X-Runner-Token") == "secret" else 403
-        self.send_response(status)
-        self.end_headers()
-        self.wfile.write(f"exit: 0 {self.path}".encode())
+def test_runner_failure_becomes_gateway_unavailable(tmp_path: Path) -> None:
+    def refuse(settings: RunnerSettings, target: str) -> None:
+        raise RunnerUnavailableError("раннер недоступен")
 
-    def log_message(self, format: str, *args: Any) -> None:
-        return
+    gateway = RunnerLiquibaseGateway(tmp_path, RUNNER, call=refuse)
 
-
-@pytest.fixture
-def http_runner() -> Iterator[str]:
-    server = HTTPServer(("127.0.0.1", 0), _Handler)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    yield f"http://127.0.0.1:{server.server_address[1]}"
-    server.shutdown()
-
-
-def test_call_runner_succeeds(http_runner: str) -> None:
-    call_runner(RunnerSettings(http_runner, "secret", 5), "liquibase-update")
-
-
-def test_call_runner_rejected_token(http_runner: str) -> None:
-    with pytest.raises(GatewayUnavailableError, match="HTTP 403"):
-        call_runner(RunnerSettings(http_runner, "wrong", 5), "liquibase-update")
-
-
-def test_call_runner_unreachable() -> None:
     with pytest.raises(GatewayUnavailableError) as caught:
-        call_runner(RunnerSettings("http://127.0.0.1:9", "secret", 2), "liquibase-update")
+        gateway.update("c.yaml", DATABASE)
 
     assert caught.value.kind == "runner_unavailable"
