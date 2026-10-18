@@ -15,16 +15,18 @@ Python-проект CLI `forge`, целевая и тестовая БД Postgre
   `migration`, `reconciliation`, `operation` (в каждом слои `domain`, `application`,
   `infrastructure`) и общим слоем `cli`; точка входа `uv run forge`; проверки `pytest`, `ruff`,
   `mypy --strict`.
-- Проектный `docker-compose.yaml` с сервисами `lbfr-db` (целевая БД операций), `lbfr-db-test`
-  (БД интеграционных тестов) и `lbfr-liquibase` (одноразовый контейнер Liquibase); файл kit'а
-  `docker-compose.yml` подключает его через `include:`.
+- Файл Compose инструмента `docker/lbfr/docker-compose.yaml` с сервисами `lbfr-db` (целевая
+  БД операций), `lbfr-db-test` (БД интеграционных тестов) и `lbfr-liquibase` (одноразовый контейнер Liquibase из собственного
+  образа: официальный образ Liquibase 5.x с драйвером PostgreSQL, добавленным через `lpm`);
+  файл kit'а `docker-compose.yml` подключает его через `include:`.
 - Шлюз Liquibase: цели `make liquibase-update` и `liquibase-rollback`, исполняемые на хосте через
   раннер. Параметры приходят файлом запроса `.forge/liquibase-request.json`, результат уходит
   файлом `.forge/liquibase-result.json`; шлюз проверяет пути и перечень тестовых БД.
 - Цели шлюза дописаны в белый список раннера `tools/host-runner/runner.py` — отличие от поставки
   kit'а, зафиксированное в README.
 - Переменные `FORGE_DB_*`, `FORGE_TEST_DB_*`, `FORGE_TEST_DB_ALLOWLIST`, `LBFR_POSTGRES_IMAGE`,
-  `LBFR_LIQUIBASE_IMAGE` в `.env.example`; каталог `.forge/` в `.gitignore`.
+  `LBFR_LIQUIBASE_BASE_IMAGE`, `LBFR_LIQUIBASE_POSTGRESQL_DRIVER`, `LBFR_LIQUIBASE_IMAGE`
+  в `.env.example`; каталоги `.forge/` и `.venv/` в `.gitignore`.
 - Тестовая инфраструктура: фикстура `pytest`, создающая и удаляющая отдельную БД на каждый тест
   в `lbfr-db-test`.
 
@@ -42,7 +44,7 @@ Python-проект CLI `forge`, целевая и тестовая БД Postgre
 
 ## Impact
 
-- **Новые файлы:** `pyproject.toml`, `uv.lock`, `src/forge/**`, `tests/**`, `docker-compose.yaml`,
+- **Новые файлы:** `pyproject.toml`, `uv.lock`, `src/forge/**`, `tests/**`, `docker/lbfr/docker-compose.yaml`,
   `tools/liquibase/gateway.py`.
 - **Файлы поставки kit'а** (отслеживаются `.sdd-kit-manifest.json`): `docker-compose.yml` — строка
   `include:`; `Makefile` — две цели; `tools/host-runner/runner.py` — белый список; `.env.example` —

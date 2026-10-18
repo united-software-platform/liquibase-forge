@@ -1,0 +1,15 @@
+# Changelog сквозной проверки шлюза Liquibase: одна таблица, откат выводится Liquibase сам
+databaseChangeLog:
+  - changeSet:
+      id: gateway-probe-01
+      author: forge
+      changes:
+        - createTable:
+            tableName: gateway_probe
+            columns:
+              - column:
+                  name: id
+                  type: integer
+                  constraints:
+                    primaryKey: true
+                    nullable: false
