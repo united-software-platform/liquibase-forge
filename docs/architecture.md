@@ -192,7 +192,9 @@ flowchart LR
   действие цели совпадает с действием запроса. Учётные данные шлюз берёт из окружения хоста,
   а не из запроса.
 - **Сети.** `lbfr-db` и `lbfr-db-test` подключены к `lbfr-net` и к сети `default`, где работает
-  контейнер агента. Порты на хост не публикуются.
+  контейнер агента. Агент и шлюз обращаются к БД по адресу внутри сети Compose.
+- **Порты.** `lbfr-db` публикуется на хост на порт `FORGE_DB_HOST_PORT` — для подключения
+  клиентом с хоста. `lbfr-db-test` на хост не публикуется.
 
 Подготовка окружения и отличия от поставки kit'а описаны в [README.md](../README.md).
 
@@ -219,3 +221,4 @@ flowchart LR
 | 1.0.2 | 2026-10-18 | OpenSpec change `forge-migration` | Claude Code | Claude Opus 5.5 | Контракт `forge generate` дополнен беклогом операции и путём changelog; у `forge apply` БД вне перечня тестовых перенесена из кода `1` в код `2` — ошибку окружения, при которой попытка не расходуется; уточнены места `apply.json` и `rollback.json`, условие запасного пути отката; добавлена ссылка на `migration.md` |
 | 1.0.3 | 2026-10-18 | OpenSpec change `forge-reconciliation` | Claude Code | Claude Opus 5.5 | Контракт `forge reconcile` дополнен параметрами БД из окружения и местом `reconcile.json`; добавлена ссылка на `reconciliation.md` |
 | 1.0.4 | 2026-10-18 | OpenSpec change `forge-operation` | Claude Code | Claude Opus 5.5 | В контракт команд добавлены `forge stop` и `forge resume`; у `forge status` — ключ `--latest` и проверки среды с кодом `2`, у `forge close` — случай кода `1`; добавлена ссылка на `operation.md`; снято ограничение о нереализованных командах |
+| 1.0.5 | 2026-10-19 | OpenSpec change `publish-db-port` | Claude Code | Claude Opus 5.5 | В разделе «Окружение исполнения» утверждение «Порты на хост не публикуются» заменено пунктом «Порты»: `lbfr-db` публикуется на хост на порт `FORGE_DB_HOST_PORT`, `lbfr-db-test` не публикуется; в пункте «Сети» зафиксировано, что агент и шлюз обращаются к БД по адресу внутри сети Compose |

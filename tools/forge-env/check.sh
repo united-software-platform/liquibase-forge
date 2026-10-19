@@ -25,4 +25,19 @@ for service in claude lbfr-db lbfr-db-test lbfr-liquibase; do
 	fi
 done
 [ "$status" -eq 0 ] || echo "Ошибка: Compose выбрал не тот файл или include: не сработал" >&2
+
+# Хостовый порт lbfr-db приходит из .env без значения по умолчанию: пустая переменная не должна
+# молча дать БД без публикации или со случайным портом. Ошибка разбора конфигурации — тоже отказ
+published=$(docker compose config --format json lbfr-db 2>/dev/null | python3 -c '
+import json, sys
+ports = json.load(sys.stdin)["services"]["lbfr-db"].get("ports") or []
+print(next((str(p.get("published") or "") for p in ports if p.get("target") == 5432), ""))
+' 2>/dev/null) || published=""
+if [ -n "$published" ]; then
+	echo "  порт lbfr-db на хосте: $published"
+else
+	echo "  порт lbfr-db на хосте: НЕ ЗАДАН" >&2
+	echo "Ошибка: в .env нет значения FORGE_DB_HOST_PORT — выполните make forge-env-sync" >&2
+	status=1
+fi
 exit "$status"
