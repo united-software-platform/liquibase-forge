@@ -11,6 +11,7 @@ from forge.migration.application.liquibase_gateway import GatewayUnavailableErro
 from forge.migration.application.operation_record import OperationRecordUnavailableError
 from forge.migration.application.rollback_attempt.input import RollbackAttemptInput
 from forge.migration.application.rollback_attempt.use_case import (
+    ACCEPTED_MASTER,
     RollbackAttemptUseCase,
     RollbackAttemptUseCaseInterface,
     RollbackDependencies,
@@ -46,7 +47,7 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
     parser.set_defaults(handler=run)
 
 
-def build_use_case() -> RollbackAttemptUseCaseInterface:
+def build_use_case(accepted_master: str = ACCEPTED_MASTER) -> RollbackAttemptUseCaseInterface:
     """Собрать сценарий: окружение процесса, `psycopg`, шлюз через раннер."""
     settings = EnvironmentSettings(os.environ)
     connector = PostgresConnector(settings.credentials())
@@ -60,7 +61,8 @@ def build_use_case() -> RollbackAttemptUseCaseInterface:
             recreator=PsycopgDatabaseRecreator(connector),
             gateway=RunnerLiquibaseGateway(Path.cwd(), runner_settings(os.environ)),
             writer=JsonResultWriter(),
-        )
+        ),
+        accepted_master,
     )
 
 

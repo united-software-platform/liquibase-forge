@@ -23,7 +23,10 @@ from tests.migration.fakes import (
 
 
 def _rollback(
-    db: FakeDatabase, verdict: str | None = "failure", allowlist: str = "lbfr-db-test:5432/*"
+    db: FakeDatabase,
+    verdict: str | None = "failure",
+    allowlist: str = "lbfr-db-test:5432/*",
+    **options: str,
 ) -> tuple[RollbackAttemptOutput, FakeWriter]:
     writer = FakeWriter()
     use_case = RollbackAttemptUseCase(
@@ -36,7 +39,8 @@ def _rollback(
             recreator=db,
             gateway=db,
             writer=writer,
-        )
+        ),
+        **options,
     )
     return use_case.execute(RollbackAttemptInput("trail/tasks.md", 1)), writer
 
@@ -101,6 +105,17 @@ def test_foreign_entry_after_attempt_takes_fallback() -> None:
     assert output.action == "recreate_database"
     assert output.fallback_reason == "записи попытки не являются хвостом журнала"
     assert output.verified is True
+
+
+def test_fallback_restores_given_accepted_master() -> None:
+    db = FakeDatabase(master_exists=True)
+    db.apply_attempt(2)
+    db.journal.append(JournalEntry("other-01", "forge", "db/changelog/other.yaml", 9))
+
+    output, _ = _rollback(db, accepted_master="trail/accepted/master.yaml")
+
+    assert db.calls == ["recreate", "update trail/accepted/master.yaml"]
+    assert output.checks[0].detail == "накат trail/accepted/master.yaml: код 0"
 
 
 def test_liquibase_failure_takes_fallback() -> None:

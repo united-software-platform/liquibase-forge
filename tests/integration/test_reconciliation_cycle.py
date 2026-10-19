@@ -50,7 +50,7 @@ def test_applied_model_reconciles_without_discrepancies(
     assert result == payload
 
 
-DRIFTS: list[tuple[str, str, tuple[str, str | None, str | None]]] = [
+DRIFTS: list[tuple[str, str, tuple[str | None, str | None, str | None]]] = [
     (
         "ALTER TABLE customer ADD COLUMN legacy text",
         "column_unexpected",
@@ -86,7 +86,7 @@ def test_drift_gives_discrepancy(
     target: TestDatabase,
     statement: str,
     kind: str,
-    subject: tuple[str, str | None, str | None],
+    subject: tuple[str | None, str | None, str | None],
 ) -> None:
     model, changelog = _apply_example(capsys, trail)
     with psycopg.connect(target.conninfo) as connection:

@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import json
 import shutil
+from argparse import Namespace
 from pathlib import Path
 
 import psycopg
 import pytest
 
+from forge.cli.commands import rollback
 from tests.conftest import TestDatabase
 from tests.integration.migration_support import STAMP, forge
 from tests.migration.operation_backlog import write_operation
@@ -58,7 +60,10 @@ def _state(database: TestDatabase) -> tuple[list[str], list[str]]:
 
 
 def _rollback(capsys: pytest.CaptureFixture[str], trail: Path) -> tuple[int, dict[str, object]]:
-    return forge(capsys, "rollback", "--operation", str(trail / "tasks.md"), "--attempt", "1")
+    """Откатить попытку 1; принятый master — в следе, где его нет, а не в `db/` проекта."""
+    use_case = rollback.build_use_case(accepted_master=str(trail / "accepted" / "master.yaml"))
+    code = rollback.run(Namespace(operation=str(trail / "tasks.md"), attempt=1), use_case)
+    return code, json.loads(capsys.readouterr().out)
 
 
 def test_rollback_returns_schema(

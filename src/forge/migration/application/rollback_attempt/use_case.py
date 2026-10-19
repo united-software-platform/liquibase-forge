@@ -54,12 +54,16 @@ class RollbackAttemptUseCase:
 
     Откат Liquibase выполняется, только если записи попытки — хвост журнала и changelog
     попытки на месте. Иначе, как и при ошибке Liquibase, целевая БД пересоздаётся и получает
-    принятый `db/changelog/master.yaml`. Затем проверяется возврат, итог пишется
-    в `rollback.json` каталога попытки. Ошибки окружения — исключения контрактов.
+    принятый changelog `accepted_master` — по умолчанию `db/changelog/master.yaml`. Затем
+    проверяется возврат, итог пишется в `rollback.json` каталога попытки. Ошибки окружения —
+    исключения контрактов.
     """
 
-    def __init__(self, dependencies: RollbackDependencies) -> None:
+    def __init__(
+        self, dependencies: RollbackDependencies, accepted_master: str = ACCEPTED_MASTER
+    ) -> None:
         self._deps = dependencies
+        self._accepted_master = accepted_master
 
     def execute(self, input: RollbackAttemptInput) -> RollbackAttemptOutput:
         record = self._deps.operations.read(input.operation_path)
@@ -138,14 +142,14 @@ class RollbackAttemptUseCase:
         # Перед удалением БД перечень тестовых проверяется ещё раз — вплотную к DROP DATABASE
         self._deps.settings.allowlist().require(target)
         self._deps.recreator.recreate(target)
-        if not self._deps.changelogs.exists(ACCEPTED_MASTER):
-            detail = f"{ACCEPTED_MASTER} нет: принятого состояния нет, БД оставлена пустой"
+        if not self._deps.changelogs.exists(self._accepted_master):
+            detail = f"{self._accepted_master} нет: принятого состояния нет, БД оставлена пустой"
             return {"recreated": True, "master": None}, CheckView("accepted_restored", True, detail)
-        result = self._deps.gateway.update(ACCEPTED_MASTER, target)
+        result = self._deps.gateway.update(self._accepted_master, target)
         check = CheckView(
             "accepted_restored",
             result.succeeded,
-            f"накат {ACCEPTED_MASTER}: код {result.exit_code}",
+            f"накат {self._accepted_master}: код {result.exit_code}",
         )
         return {"recreated": True, "master": _gateway_document(result)}, check
 
