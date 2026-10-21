@@ -432,3 +432,25 @@ def test_result_directory_created_when_missing(tmp_path: Path) -> None:
     gateway.write_result(tmp_path, result)
 
     assert (tmp_path / ".forge" / "liquibase-result.json").is_file()
+
+
+def test_result_hides_exchange_from_git(tmp_path: Path) -> None:
+    gateway.write_result(tmp_path, gateway.Result(None, "update", 2, "", "нет файла запроса"))
+
+    lines = (tmp_path / ".forge" / ".gitignore").read_text("utf-8").splitlines()
+    assert "*" in lines
+
+
+def test_existing_exchange_ignore_is_kept_by_gateway(tmp_path: Path) -> None:
+    (tmp_path / ".forge").mkdir()
+    (tmp_path / ".forge" / ".gitignore").write_text("liquibase-*.json\n", encoding="utf-8")
+
+    gateway.write_result(tmp_path, gateway.Result(None, "update", 2, "", "нет файла запроса"))
+
+    assert (tmp_path / ".forge" / ".gitignore").read_text("utf-8") == "liquibase-*.json\n"
+
+
+def test_exchange_ignore_text_matches_forge() -> None:
+    from forge.migration.infrastructure.runner_gateway import EXCHANGE_IGNORE_TEXT
+
+    assert gateway.EXCHANGE_IGNORE_TEXT == EXCHANGE_IGNORE_TEXT

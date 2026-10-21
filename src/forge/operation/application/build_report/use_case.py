@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import PurePosixPath
 from typing import Protocol
 
 from forge.operation.application.accepted_state import (
@@ -30,8 +31,9 @@ class BuildReportUseCase:
     """Отчёт без побочных эффектов: беклог, результаты попыток и принятые файлы.
 
     В отчёт входят попытки, которые начались: с вердиктом или порождённым беклогом.
-    Итоговые модель и changelog — принятые файлы `db/` при `success`, иначе файлы
-    последней начатой попытки.
+    Итоговые модель и changelog — принятые файлы корня принятого состояния при `success`,
+    иначе файлы последней начатой попытки. Файлы для коммита называются только у закрытой
+    операции: след операции, а при `success` — и принятые файлы.
     """
 
     def __init__(
@@ -76,6 +78,11 @@ class BuildReportUseCase:
         else:
             model = changelog = None
         backlogs = (operation.path, *(a.backlog for a in attempts if a.backlog is not None))
+        commit_files: tuple[str, ...] | None = None
+        if operation.status in (OperationStatus.SUCCESS, OperationStatus.FAILURE):
+            trail = tuple(_directory(backlog) for backlog in backlogs)
+            files = (accepted.model, accepted.changelog, accepted.master) if accepted else ()
+            commit_files = (*files, *trail)
         return BuildReportOutput(
             operation=operation_view(operation),
             model=model,
@@ -83,4 +90,10 @@ class BuildReportUseCase:
             attempts=attempts,
             backlogs=backlogs,
             accepted=accepted,
+            commit_files=commit_files,
         )
+
+
+def _directory(backlog: str) -> str:
+    """Каталог беклога в следе с завершающим `/`: коммитится целиком, с артефактами попыток."""
+    return f"{PurePosixPath(backlog).parent.as_posix()}/"

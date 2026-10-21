@@ -24,9 +24,13 @@ from forge.operation.infrastructure.attempt_results import JsonAttemptResultsRea
 from forge.shared.application.settings import SettingsUnavailableError
 
 FAILURE = "failure"
-COMMIT_HINT = (
-    "Принятое состояние не закоммичено: закоммитьте эти файлы, указав код и номер задачи "
-    "в сообщении коммита"
+SUCCESS_HINT = (
+    "Принятое состояние и след операции не закоммичены: закоммитьте эти файлы и каталоги, "
+    "указав код и номер задачи в сообщении коммита"
+)
+FAILURE_HINT = (
+    "Принятое состояние не изменилось; след операции объясняет почему: закоммитьте эти каталоги, "
+    "указав код и номер задачи в сообщении коммита"
 )
 
 
@@ -81,8 +85,11 @@ def report_payload(output: BuildReportOutput) -> dict[str, Any]:
         "backlogs": list(output.backlogs),
         "accepted": asdict(accepted) if accepted else None,
         "commit": (
-            {"files": [accepted.model, accepted.changelog, accepted.master], "hint": COMMIT_HINT}
-            if accepted
+            {
+                "files": list(output.commit_files),
+                "hint": FAILURE_HINT if output.operation.status == FAILURE else SUCCESS_HINT,
+            }
+            if output.commit_files is not None
             else None
         ),
     }

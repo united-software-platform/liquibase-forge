@@ -28,7 +28,11 @@ class AttemptReport:
 
 @dataclass(frozen=True)
 class BuildReportOutput:
-    """Отчёт: операция, итоговые модель и changelog, попытки, беклоги, принятые файлы."""
+    """Отчёт: операция, итоговые модель и changelog, попытки, беклоги, файлы для коммита.
+
+    `commit_files` — `None` у открытой операции; у закрытой — принятые файлы при `success`
+    и каталоги следа: операции и беклогов начатых попыток.
+    """
 
     operation: OperationView
     model: str | None
@@ -36,3 +40,4 @@ class BuildReportOutput:
     attempts: tuple[AttemptReport, ...]
     backlogs: tuple[str, ...]
     accepted: AcceptedFiles | None
+    commit_files: tuple[str, ...] | None

@@ -26,6 +26,10 @@ from typing import Any
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 REQUEST_PATH = PurePosixPath(".forge/liquibase-request.json")
 RESULT_PATH = PurePosixPath(".forge/liquibase-result.json")
+EXCHANGE_IGNORE = PurePosixPath(".forge/.gitignore")
+# Тот же текст пишет forge перед файлом запроса: файлы обмена скрыты от git в любом проекте,
+# а `.gitignore` корня проекта не правится
+EXCHANGE_IGNORE_TEXT = "# Файлы обмена forge со шлюзом Liquibase: локальные, не коммитятся\n*\n"
 
 SERVICE = "lbfr-liquibase"
 ACTIONS = ("update", "rollback")
@@ -316,6 +320,9 @@ def write_result(root: Path, result: Result) -> None:
     """Записать файл результата целиком: читатель не увидит его недописанным."""
     path = root / RESULT_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
+    ignore = root / EXCHANGE_IGNORE
+    if not ignore.exists():
+        ignore.write_text(EXCHANGE_IGNORE_TEXT, encoding="utf-8")
     draft = path.with_name(path.name + ".tmp")
     draft.write_text(json.dumps(result.to_json(), ensure_ascii=False, indent=2), encoding="utf-8")
     os.replace(draft, path)

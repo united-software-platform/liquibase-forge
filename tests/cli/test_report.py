@@ -91,7 +91,11 @@ def test_success_on_second_attempt(tmp_path: Path, capsys: pytest.CaptureFixture
         f"{db}/model.yaml",
         f"{db}/changelog/{STAMP}.yaml",
         f"{db}/changelog/master.yaml",
+        f"{path.parent.as_posix()}/",
+        f"backlog/forge-apply/{STAMP}-1/",
+        f"backlog/forge-apply/{STAMP}-2/",
     ]
+    assert "след операции" in payload["commit"]["hint"]
 
 
 def test_failure_after_three_attempts(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -113,7 +117,9 @@ def test_failure_after_three_attempts(tmp_path: Path, capsys: pytest.CaptureFixt
     assert all(
         a["reconcile"]["discrepancies"] and a["rollback"]["verified"] for a in payload["attempts"]
     )
-    assert (payload["accepted"], payload["commit"]) == (None, None)
+    assert payload["accepted"] is None
+    assert payload["commit"]["files"] == [f"{path.parent.as_posix()}/"]
+    assert "не изменилось" in payload["commit"]["hint"]
     assert payload["model"].endswith("attempt-3/model.yaml")
 
 
@@ -132,7 +138,7 @@ def test_stopped_operation(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -
         "stopped",
         "отказ владельца",
     )
-    assert (payload["attempts"], payload["model"]) == ([], None)
+    assert (payload["attempts"], payload["model"], payload["commit"]) == ([], None, None)
 
 
 def test_missing_backlog(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -158,6 +164,7 @@ def test_report_with_accepted_root_outside_db(
         ".forge/db/model.yaml",
         f".forge/db/changelog/{STAMP}.yaml",
         ".forge/db/changelog/master.yaml",
+        f"{path.parent.as_posix()}/",
     ]
 
 

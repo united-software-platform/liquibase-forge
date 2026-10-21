@@ -10,6 +10,7 @@ import pytest
 
 from forge.migration.application.liquibase_gateway import GatewayUnavailableError
 from forge.migration.infrastructure.runner_gateway import (
+    EXCHANGE_IGNORE,
     REQUEST_PATH,
     RESULT_PATH,
     RunnerLiquibaseGateway,
@@ -150,3 +151,22 @@ def test_runner_failure_becomes_gateway_unavailable(tmp_path: Path) -> None:
         gateway.update("c.yaml", DATABASE)
 
     assert caught.value.kind == "runner_unavailable"
+
+
+def test_first_request_hides_exchange_from_git(tmp_path: Path) -> None:
+    runner = _Runner(tmp_path, {"exit_code": 0, "stdout": "ok", "stderr": ""})
+
+    _gateway(tmp_path, runner).update("backlog/attempt-1/changelog.yaml", DATABASE)
+
+    lines = (tmp_path / EXCHANGE_IGNORE).read_text(encoding="utf-8").splitlines()
+    assert "*" in lines
+
+
+def test_existing_exchange_ignore_is_kept(tmp_path: Path) -> None:
+    (tmp_path / ".forge").mkdir()
+    (tmp_path / EXCHANGE_IGNORE).write_text("liquibase-*.json\n", encoding="utf-8")
+    runner = _Runner(tmp_path, {"exit_code": 0, "stdout": "ok", "stderr": ""})
+
+    _gateway(tmp_path, runner).update("backlog/attempt-1/changelog.yaml", DATABASE)
+
+    assert (tmp_path / EXCHANGE_IGNORE).read_text(encoding="utf-8") == "liquibase-*.json\n"

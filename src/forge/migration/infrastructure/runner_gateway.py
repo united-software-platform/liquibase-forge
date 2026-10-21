@@ -20,6 +20,10 @@ from forge.shared.infrastructure.runner import RunnerCall, RunnerSettings, call_
 
 REQUEST_PATH = Path(".forge") / "liquibase-request.json"
 RESULT_PATH = Path(".forge") / "liquibase-result.json"
+EXCHANGE_IGNORE = Path(".forge") / ".gitignore"
+# Тот же текст пишет шлюз на хосте: файлы обмена скрыты от git в любом проекте,
+# а `.gitignore` корня проекта не правится
+EXCHANGE_IGNORE_TEXT = "# Файлы обмена forge со шлюзом Liquibase: локальные, не коммитятся\n*\n"
 
 
 class RunnerLiquibaseGateway:
@@ -63,6 +67,9 @@ class RunnerLiquibaseGateway:
         }
         request_path = self._root / REQUEST_PATH
         request_path.parent.mkdir(parents=True, exist_ok=True)
+        ignore = self._root / EXCHANGE_IGNORE
+        if not ignore.exists():
+            ignore.write_text(EXCHANGE_IGNORE_TEXT, encoding="utf-8")
         request_path.write_text(json.dumps(request, ensure_ascii=False), encoding="utf-8")
         try:
             self._call(self._runner, f"liquibase-{action}")
