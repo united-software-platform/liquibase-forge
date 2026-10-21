@@ -11,7 +11,6 @@ from forge.migration.application.liquibase_gateway import GatewayUnavailableErro
 from forge.migration.application.operation_record import OperationRecordUnavailableError
 from forge.migration.application.rollback_attempt.input import RollbackAttemptInput
 from forge.migration.application.rollback_attempt.use_case import (
-    ACCEPTED_MASTER,
     RollbackAttemptUseCase,
     RollbackAttemptUseCaseInterface,
     RollbackDependencies,
@@ -37,6 +36,7 @@ from forge.shared.infrastructure.runner import runner_settings
 from forge.shared.infrastructure.settings import EnvironmentSettings
 
 ATTEMPTS = (1, 2, 3)
+ACCEPTED_MASTER = "changelog/master.yaml"
 
 
 def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -47,9 +47,15 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
     parser.set_defaults(handler=run)
 
 
-def build_use_case(accepted_master: str = ACCEPTED_MASTER) -> RollbackAttemptUseCaseInterface:
+def accepted_master(settings: EnvironmentSettings) -> str:
+    """Принятый `master.yaml` корня принятого состояния — для наката на запасном пути."""
+    return (settings.accepted_root() / ACCEPTED_MASTER).as_posix()
+
+
+def build_use_case(accepted_master_path: str | None = None) -> RollbackAttemptUseCaseInterface:
     """Собрать сценарий: окружение процесса, `psycopg`, шлюз через раннер."""
     settings = EnvironmentSettings(os.environ)
+    master = accepted_master_path or accepted_master(settings)
     connector = PostgresConnector(settings.credentials())
     return RollbackAttemptUseCase(
         RollbackDependencies(
@@ -62,7 +68,7 @@ def build_use_case(accepted_master: str = ACCEPTED_MASTER) -> RollbackAttemptUse
             gateway=RunnerLiquibaseGateway(Path.cwd(), runner_settings(os.environ)),
             writer=JsonResultWriter(),
         ),
-        accepted_master,
+        master,
     )
 
 

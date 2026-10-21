@@ -29,6 +29,7 @@ def _rollback(
     **options: str,
 ) -> tuple[RollbackAttemptOutput, FakeWriter]:
     writer = FakeWriter()
+    options.setdefault("accepted_master", "db/changelog/master.yaml")
     use_case = RollbackAttemptUseCase(
         RollbackDependencies(
             operations=FakeOperations(verdict),
@@ -116,6 +117,16 @@ def test_fallback_restores_given_accepted_master() -> None:
 
     assert db.calls == ["recreate", "update trail/accepted/master.yaml"]
     assert output.checks[0].detail == "накат trail/accepted/master.yaml: код 0"
+
+
+def test_fallback_restores_master_outside_db() -> None:
+    db = FakeDatabase(master_exists=True)
+    db.apply_attempt(2)
+    db.journal.append(JournalEntry("other-01", "forge", "db/changelog/other.yaml", 9))
+
+    _rollback(db, accepted_master=".forge/db/changelog/master.yaml")
+
+    assert db.calls == ["recreate", "update .forge/db/changelog/master.yaml"]
 
 
 def test_liquibase_failure_takes_fallback() -> None:

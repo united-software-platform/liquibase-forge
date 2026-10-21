@@ -59,7 +59,16 @@ def test_runner_down(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None
         ("database", True),
         ("allowlist", True),
         ("runner", False),
+        ("accepted", True),
     ]
+
+
+def test_accepted_root_outside_project(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    code, payload = _status(tmp_path, capsys, str(generate(tmp_path)), FakeProbe(accepted=False))
+
+    assert code == 2
+    assert payload["environment_ok"] is False
+    assert {c["check"]: c["passed"] for c in payload["environment"]}["accepted"] is False
 
 
 def test_latest_without_open_operations(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

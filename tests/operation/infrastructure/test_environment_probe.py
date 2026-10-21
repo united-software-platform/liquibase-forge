@@ -75,23 +75,70 @@ def test_all_checks_pass() -> None:
         ("database", True),
         ("allowlist", True),
         ("runner", True),
+        ("accepted", True),
     ]
     assert calls == [("help", 30.0)]
 
 
 def test_database_down() -> None:
-    assert _checks(ENV, connector=_Down) == {"database": False, "allowlist": True, "runner": True}
+    assert _checks(ENV, connector=_Down) == {
+        "database": False,
+        "allowlist": True,
+        "runner": True,
+        "accepted": True,
+    }
 
 
 def test_database_outside_allowlist() -> None:
     env = {**ENV, "FORGE_TEST_DB_ALLOWLIST": "lbfr-db-test:5432/*"}
 
-    assert _checks(env) == {"database": True, "allowlist": False, "runner": True}
+    assert _checks(env) == {
+        "database": True,
+        "allowlist": False,
+        "runner": True,
+        "accepted": True,
+    }
 
 
 def test_runner_down() -> None:
-    assert _checks(ENV, fail=True) == {"database": True, "allowlist": True, "runner": False}
+    assert _checks(ENV, fail=True) == {
+        "database": True,
+        "allowlist": True,
+        "runner": False,
+        "accepted": True,
+    }
 
 
 def test_missing_variables_are_failed_checks() -> None:
-    assert _checks({}) == {"database": False, "allowlist": False, "runner": False}
+    assert _checks({}) == {
+        "database": False,
+        "allowlist": False,
+        "runner": False,
+        "accepted": True,
+    }
+
+
+def test_accepted_root_is_named() -> None:
+    env = {**ENV, "FORGE_ACCEPTED_DIR": ".forge/db"}
+    checks = EnvironmentProbe(env, connector=_Connector, call=_runner([])).check()  # type: ignore[arg-type]
+
+    accepted = {c.name: c for c in checks}["accepted"]
+    assert accepted.passed
+    assert ".forge/db" in accepted.detail
+
+
+def test_accepted_root_defaults_to_db() -> None:
+    checks = EnvironmentProbe(ENV, connector=_Connector, call=_runner([])).check()  # type: ignore[arg-type]
+
+    assert {c.name: c.detail for c in checks}["accepted"].endswith(" db")
+
+
+def test_accepted_root_outside_project() -> None:
+    env = {**ENV, "FORGE_ACCEPTED_DIR": "../db"}
+
+    assert _checks(env) == {
+        "database": True,
+        "allowlist": True,
+        "runner": True,
+        "accepted": False,
+    }

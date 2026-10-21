@@ -1,4 +1,4 @@
-<!-- template_version: 1.1.0 -->
+<!-- template_version: 1.2.0 -->
 ---
 template_version: "{{template_version}}"
 generated: "{{date}}"
@@ -109,9 +109,9 @@ verdict: null
   поправить модель в пределах подтверждённого толкования и повторить проверку
   - Проверка: код возврата `0`, перечень нарушений пуст
   - Выполнено ранее: проверка состояния — повторяется без последствий
-- [ ] 2.4 Построить changelog: `forge generate --model {{trail}}/model.yaml --accepted db/model.yaml
-  --operation {{parent}} --out {{trail}}/changelog.yaml`. При отказе из-за неаддитивных изменений поправить модель
-  и вернуться к 2.3
+- [ ] 2.4 Построить changelog: `forge generate --model {{trail}}/model.yaml
+  --operation {{parent}} --out {{trail}}/changelog.yaml` — принятую модель CLI берёт из корня
+  принятого состояния. При отказе из-за неаддитивных изменений поправить модель и вернуться к 2.3
   - Проверка: код возврата `0`, файл `{{trail}}/changelog.yaml` существует
   - Выполнено ранее: changelog существует и повторная генерация даёт тот же файл
 

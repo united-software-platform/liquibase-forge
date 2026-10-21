@@ -24,7 +24,6 @@ from forge.shared.application.result_writer import ResultWriterInterface
 from forge.shared.application.settings import TargetDatabaseSettingsInterface
 from forge.shared.domain.target_database import TargetDatabase
 
-ACCEPTED_MASTER = "db/changelog/master.yaml"
 CHANGELOG = "changelog.yaml"
 ROLLBACK_RESULT = "rollback.json"
 
@@ -54,14 +53,12 @@ class RollbackAttemptUseCase:
 
     Откат Liquibase выполняется, только если записи попытки — хвост журнала и changelog
     попытки на месте. Иначе, как и при ошибке Liquibase, целевая БД пересоздаётся и получает
-    принятый changelog `accepted_master` — по умолчанию `db/changelog/master.yaml`. Затем
+    принятый changelog `accepted_master` — `master.yaml` корня принятого состояния. Затем
     проверяется возврат, итог пишется в `rollback.json` каталога попытки. Ошибки окружения —
     исключения контрактов.
     """
 
-    def __init__(
-        self, dependencies: RollbackDependencies, accepted_master: str = ACCEPTED_MASTER
-    ) -> None:
+    def __init__(self, dependencies: RollbackDependencies, accepted_master: str) -> None:
         self._deps = dependencies
         self._accepted_master = accepted_master
 

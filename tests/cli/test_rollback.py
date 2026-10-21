@@ -19,8 +19,10 @@ from forge.migration.application.rollback_attempt.use_case import (
 from forge.migration.infrastructure.operation_record_reader import (
     FrontmatterOperationRecordReader,
 )
+from forge.shared.application.settings import SettingsUnavailableError
 from forge.shared.domain.target_database import TargetDatabase
 from forge.shared.infrastructure.json_result_writer import JsonResultWriter
+from forge.shared.infrastructure.settings import EnvironmentSettings
 from tests.migration.fakes import FakeDatabase, FakeSettings
 from tests.migration.operation_backlog import write_operation
 
@@ -43,7 +45,8 @@ def _rollback(
             recreator=db,
             gateway=db,
             writer=JsonResultWriter(),
-        )
+        ),
+        "db/changelog/master.yaml",
     )
     code = rollback.run(argparse.Namespace(operation=str(operation), attempt=1), use_case)
     lines = [line for line in capsys.readouterr().out.splitlines() if line.strip()]
@@ -127,3 +130,21 @@ def test_missing_environment(
 
     assert code == 2
     assert json.loads(capsys.readouterr().out)["error"]["kind"] == "settings_unavailable"
+
+
+@pytest.mark.parametrize(
+    ("accepted_dir", "master"),
+    [
+        (None, "db/changelog/master.yaml"),
+        (".forge/db", ".forge/db/changelog/master.yaml"),
+    ],
+)
+def test_fallback_master_from_accepted_root(accepted_dir: str | None, master: str) -> None:
+    env = {} if accepted_dir is None else {"FORGE_ACCEPTED_DIR": accepted_dir}
+
+    assert rollback.accepted_master(EnvironmentSettings(env)) == master
+
+
+def test_fallback_master_outside_project() -> None:
+    with pytest.raises(SettingsUnavailableError, match="FORGE_ACCEPTED_DIR"):
+        rollback.accepted_master(EnvironmentSettings({"FORGE_ACCEPTED_DIR": "../db"}))

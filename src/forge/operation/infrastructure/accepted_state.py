@@ -1,4 +1,4 @@
-"""Принятое состояние проекта в `db/`: модель, changelog операций и `master.yaml`."""
+"""Принятое состояние проекта в его корне: модель, changelog операций и `master.yaml`."""
 
 from __future__ import annotations
 
@@ -17,13 +17,13 @@ MASTER = "master.yaml"
 
 
 class FileAcceptedState:
-    """Реализация принятого состояния: файлы в каталоге `db/` корня проекта.
+    """Реализация принятого состояния: файлы в корне принятого состояния (`FORGE_ACCEPTED_DIR`).
 
     `include` в `master.yaml` указывает файл относительно самого `master.yaml`: так Liquibase
     находит его при любом каталоге поиска, а `logicalFilePath` changeset уже задан в файле.
     """
 
-    def __init__(self, root: Path = Path("db")) -> None:
+    def __init__(self, root: Path) -> None:
         self._root = root
 
     def files(self, stamp: str) -> AcceptedFiles:

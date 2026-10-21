@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from forge.shared.application.settings import SettingsUnavailableError
@@ -42,3 +44,25 @@ def test_port_must_be_number() -> None:
 def test_invalid_allowlist_entry() -> None:
     with pytest.raises(SettingsUnavailableError):
         EnvironmentSettings({**ENV, "FORGE_TEST_DB_ALLOWLIST": "lbfr-db/forge"}).allowlist()
+
+
+@pytest.mark.parametrize("value", [None, ""])
+def test_accepted_root_defaults_to_db(value: str | None) -> None:
+    env = ENV if value is None else {**ENV, "FORGE_ACCEPTED_DIR": value}
+
+    assert EnvironmentSettings(env).accepted_root() == Path("db")
+
+
+@pytest.mark.parametrize(
+    ("value", "root"), [(".forge/db", ".forge/db"), ("./.forge/db/", ".forge/db")]
+)
+def test_accepted_root_from_environment(value: str, root: str) -> None:
+    settings = EnvironmentSettings({**ENV, "FORGE_ACCEPTED_DIR": value})
+
+    assert settings.accepted_root() == Path(root)
+
+
+@pytest.mark.parametrize("value", ["/srv/db", "../db", "a/../../db"])
+def test_accepted_root_outside_project(value: str) -> None:
+    with pytest.raises(SettingsUnavailableError, match="FORGE_ACCEPTED_DIR"):
+        EnvironmentSettings({**ENV, "FORGE_ACCEPTED_DIR": value}).accepted_root()

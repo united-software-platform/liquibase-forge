@@ -1,4 +1,4 @@
-"""Проверка тестовой среды: целевая БД, перечень тестовых БД, раннер на хосте."""
+"""Проверка тестовой среды: целевая БД, перечень тестовых БД, раннер, корень принятого состояния."""
 
 from __future__ import annotations
 
@@ -37,7 +37,7 @@ class EnvironmentProbe:
         self._call = call
 
     def check(self) -> tuple[EnvironmentCheck, ...]:
-        return (self._database(), self._allowlist(), self._runner())
+        return (self._database(), self._allowlist(), self._runner(), self._accepted())
 
     def _database(self) -> EnvironmentCheck:
         try:
@@ -73,3 +73,11 @@ class EnvironmentProbe:
         except (SettingsUnavailableError, RunnerUnavailableError) as error:
             return EnvironmentCheck("runner", False, str(error))
         return EnvironmentCheck("runner", True, f"раннер {settings.url} отвечает")
+
+    def _accepted(self) -> EnvironmentCheck:
+        # Существование каталога не проверяется: до первого `forge close` корня нет
+        try:
+            root = self._settings.accepted_root()
+        except SettingsUnavailableError as error:
+            return EnvironmentCheck("accepted", False, str(error))
+        return EnvironmentCheck("accepted", True, f"корень принятого состояния {root.as_posix()}")

@@ -61,7 +61,7 @@ def _state(database: TestDatabase) -> tuple[list[str], list[str]]:
 
 def _rollback(capsys: pytest.CaptureFixture[str], trail: Path) -> tuple[int, dict[str, object]]:
     """Откатить попытку 1; принятый master — в следе, где его нет, а не в `db/` проекта."""
-    use_case = rollback.build_use_case(accepted_master=str(trail / "accepted" / "master.yaml"))
+    use_case = rollback.build_use_case(accepted_master_path=str(trail / "accepted" / "master.yaml"))
     code = rollback.run(Namespace(operation=str(trail / "tasks.md"), attempt=1), use_case)
     return code, json.loads(capsys.readouterr().out)
 

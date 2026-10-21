@@ -149,3 +149,57 @@ def test_acceptance_failure_keeps_status(
 
     assert (code, payload["error"]["kind"]) == (2, "acceptance_failed")
     assert "status: running" in path.read_text(encoding="utf-8")
+
+
+def _close_from_environment(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    accepted_dir: str | None,
+) -> tuple[int, dict[str, Any]]:
+    """Закрыть успешную операцию сценарием, собранным командой из окружения процесса."""
+    path = legacy(tmp_path / "trail")
+    _attempt(path, 1)
+    set_values(path, verdict__attempt_1="success")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("BACKLOG_ROOT", str(tmp_path / "trail"))
+    if accepted_dir is None:
+        monkeypatch.delenv("FORGE_ACCEPTED_DIR", raising=False)
+    else:
+        monkeypatch.setenv("FORGE_ACCEPTED_DIR", accepted_dir)
+    code = close.run(argparse.Namespace(operation=str(path)))
+    lines = [line for line in capsys.readouterr().out.splitlines() if line.strip()]
+    return code, json.loads(lines[0])
+
+
+def test_accepted_root_defaults_to_db(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    code, payload = _close_from_environment(tmp_path, capsys, monkeypatch, None)
+
+    assert code == 0
+    assert payload["accepted"]["model"] == "db/model.yaml"
+    assert (tmp_path / "db" / "model.yaml").is_file()
+
+
+def test_accepted_root_outside_db(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    code, payload = _close_from_environment(tmp_path, capsys, monkeypatch, ".forge/db")
+
+    assert code == 0
+    assert payload["accepted"]["model"] == ".forge/db/model.yaml"
+    assert (tmp_path / ".forge" / "db" / "model.yaml").is_file()
+    assert not (tmp_path / "db").exists()
+
+
+def test_absolute_accepted_root(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    code, payload = _close_from_environment(tmp_path, capsys, monkeypatch, "/srv/db")
+
+    assert code == 2
+    assert "FORGE_ACCEPTED_DIR" in json.dumps(payload, ensure_ascii=False)
+    assert not (tmp_path / "db").exists()
+    backlog = tmp_path / "trail" / "forge-model" / STAMP / "tasks.md"
+    assert "status: running" in backlog.read_text(encoding="utf-8")

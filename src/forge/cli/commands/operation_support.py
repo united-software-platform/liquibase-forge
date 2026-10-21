@@ -7,10 +7,12 @@ from pathlib import Path
 from typing import Any
 
 from forge.operation.application.views import OperationView
+from forge.operation.infrastructure.accepted_state import FileAcceptedState
 from forge.operation.infrastructure.frontmatter import (
     FrontmatterOperationReadRepository,
     FrontmatterOperationWriteRepository,
 )
+from forge.shared.infrastructure.settings import EnvironmentSettings
 
 
 def trail_root() -> Path:
@@ -24,6 +26,11 @@ def read_repository() -> FrontmatterOperationReadRepository:
 
 def write_repository() -> FrontmatterOperationWriteRepository:
     return FrontmatterOperationWriteRepository()
+
+
+def accepted_state() -> FileAcceptedState:
+    """Принятое состояние в корне `FORGE_ACCEPTED_DIR`; некорректный корень — ошибка настроек."""
+    return FileAcceptedState(EnvironmentSettings(os.environ).accepted_root())
 
 
 def operation_payload(view: OperationView) -> dict[str, Any]:

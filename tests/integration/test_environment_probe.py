@@ -35,16 +35,27 @@ def test_all_checks_pass(test_database: TestDatabase) -> None:
         "database": True,
         "allowlist": True,
         "runner": True,
+        "accepted": True,
     }
 
 
 def test_database_outside_allowlist(test_database: TestDatabase) -> None:
     env = _environment(test_database, FORGE_TEST_DB_ALLOWLIST="lbfr-db:5432/forge")
 
-    assert _passed(env) == {"database": True, "allowlist": False, "runner": True}
+    assert _passed(env) == {
+        "database": True,
+        "allowlist": False,
+        "runner": True,
+        "accepted": True,
+    }
 
 
 def test_wrong_runner_token(test_database: TestDatabase) -> None:
     env = _environment(test_database, AGENT_RUNNER_TOKEN="wrong-token")
 
-    assert _passed(env) == {"database": True, "allowlist": True, "runner": False}
+    assert _passed(env) == {
+        "database": True,
+        "allowlist": True,
+        "runner": False,
+        "accepted": True,
+    }

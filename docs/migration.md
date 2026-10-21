@@ -127,7 +127,7 @@ databaseChangeLog:
 |---------|----------|-------|
 | `id` | `<штамп>-<NN>`, номер от `01`, минимум две цифры | Однозначен в пределах операции |
 | `author` | `forge` | Отличает changeset Liquibase Forge |
-| `logicalFilePath` | `db/changelog/<штамп>.yaml` у каждого changeset | Запись `DATABASECHANGELOG` одинакова, накатан ли файл из следа попытки или из `db/` |
+| `logicalFilePath` | `db/changelog/<штамп>.yaml` у каждого changeset | Запись `DATABASECHANGELOG` одинакова, накатан ли файл из следа попытки или из корня принятого состояния, и каков этот корень |
 
 Штамп — `subject` беклога операции в виде `YYYYMMDD-HHMMSS`. Все попытки одной операции получают
 одинаковые `id`. Конфликта в журнале нет: неуспешная попытка откатывается до начала следующей.
@@ -162,15 +162,19 @@ Changelog первой поставки выражает только новые
 ## Команда forge generate
 
 ```bash
-forge generate --model <модель попытки> --accepted db/model.yaml \
+forge generate --model <модель попытки> [--accepted <принятая модель>] \
   --operation <беклог операции> --out <каталог попытки>/changelog.yaml
 ```
+
+Без `--accepted` принятой моделью служит `model.yaml` корня принятого состояния
+`FORGE_ACCEPTED_DIR` (по умолчанию `db/model.yaml`), см.
+[operation.md](./operation.md#принятое-состояние). Нет файла — принятая модель пуста.
 
 | Код | Когда | Ответ |
 |-----|-------|-------|
 | `0` | Changelog записан | `changelog`, `logical_file_path`, перечень `changesets` с `id`, видом (`create_table`, `add_column`), таблицей и колонкой |
 | `1` | Модель попытки нарушает формат или требует неаддитивных изменений | `changelog: null`, `violations` как у `forge validate` либо `non_additive`; прежний файл `--out` удалён |
-| `2` | Нет беклога операции или `subject` не штамп; модель попытки не прочитать; принятая модель есть, но некорректна | Объект `error` с видом `operation_unavailable`, `model_unreadable` или `accepted_model_invalid` |
+| `2` | Нет беклога операции или `subject` не штамп; модель попытки не прочитать; принятая модель есть, но некорректна; без `--accepted` некорректен `FORGE_ACCEPTED_DIR` | Объект `error` с видом `operation_unavailable`, `model_unreadable`, `accepted_model_invalid` или `accepted_root_invalid` |
 
 При отказе прежний changelog удаляется, чтобы устаревший файл нельзя было накатить.
 
@@ -279,8 +283,8 @@ flowchart TD
 1. Перечень тестовых проверяется повторно, вплотную к удалению БД.
 1. Под служебной БД `postgres` того же сервера выполняются `DROP DATABASE … WITH (FORCE)`
    и `CREATE DATABASE` с учётными данными `FORGE_DB_USER` и `FORGE_DB_PASSWORD`.
-1. Если есть `db/changelog/master.yaml`, он накатывается через шлюз. Если нет, принятого
-   состояния нет, и БД остаётся пустой.
+1. Если есть `master.yaml` корня принятого состояния (`<корень>/changelog/master.yaml`),
+   он накатывается через шлюз. Если нет, принятого состояния нет, и БД остаётся пустой.
 
 > **Внимание:** запасной путь удаляет целевую БД. Он выполняется только для БД из
 > `FORGE_TEST_DB_ALLOWLIST`, а пользователю `FORGE_DB_USER` нужно право создавать БД.
@@ -306,3 +310,4 @@ flowchart TD
 | Версия | Дата | Задача | Агент | Модель | Описание изменений |
 |--------|------|--------|-------|--------|--------------------|
 | 1.0.0 | 2026-10-18 | OpenSpec change `forge-migration` | Claude Code | Claude Opus 5.5 | Начальное создание: правила построения changelog с примером, идентичность changeset, состав добавляющих изменений и коды неаддитивных, команда `forge generate`, накат и `apply.json`, откат со схемой решений, проверка возврата, запасной путь с пересозданием БД |
+| 1.0.1 | 2026-10-21 | OpenSpec change `configurable-accepted-root` | Claude Code | Claude Opus 5.5 | Команда `forge generate`: `--accepted` необязателен, умолчание — `model.yaml` корня принятого состояния `FORGE_ACCEPTED_DIR`, код `2` с видом `accepted_root_invalid` при некорректном корне; запасной путь накатывает `master.yaml` корня принятого состояния вместо `db/changelog/master.yaml`; уточнено, что `logicalFilePath` не зависит от корня |

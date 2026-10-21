@@ -6,8 +6,11 @@ import argparse
 from dataclasses import asdict
 from typing import Any
 
-from forge.cli.commands.close import ACCEPTED_ROOT
-from forge.cli.commands.operation_support import operation_payload, read_repository
+from forge.cli.commands.operation_support import (
+    accepted_state,
+    operation_payload,
+    read_repository,
+)
 from forge.cli.contract import ExitCode, emit, environment_error
 from forge.operation.application.build_report.input import BuildReportInput
 from forge.operation.application.build_report.output import BuildReportOutput
@@ -17,8 +20,8 @@ from forge.operation.application.build_report.use_case import (
 )
 from forge.operation.application.operation_reading import OperationUnavailableError
 from forge.operation.domain.factory import OperationFactory
-from forge.operation.infrastructure.accepted_state import FileAcceptedState
 from forge.operation.infrastructure.attempt_results import JsonAttemptResultsReader
+from forge.shared.application.settings import SettingsUnavailableError
 
 FAILURE = "failure"
 COMMIT_HINT = (
@@ -38,15 +41,17 @@ def build_use_case() -> BuildReportUseCaseInterface:
     return BuildReportUseCase(
         read_repository(),
         JsonAttemptResultsReader(),
-        FileAcceptedState(ACCEPTED_ROOT),
+        accepted_state(),
         OperationFactory(),
     )
 
 
 def run(args: argparse.Namespace, use_case: BuildReportUseCaseInterface | None = None) -> int:
-    """`0` — отчёт собран, `1` — операция закрыта со статусом `failure`, `2` — беклог."""
+    """`0` — отчёт собран, `1` — операция закрыта со статусом `failure`, `2` — беклог или корень."""
     try:
         output = (use_case or build_use_case()).execute(BuildReportInput(args.operation))
+    except SettingsUnavailableError as error:
+        return environment_error("accepted_root_invalid", str(error), operation=args.operation)
     except OperationUnavailableError as error:
         return environment_error("operation_unavailable", str(error), operation=args.operation)
     emit(report_payload(output))

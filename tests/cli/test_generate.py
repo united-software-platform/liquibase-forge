@@ -193,3 +193,46 @@ def test_operation_argument_is_required(capsys: pytest.CaptureFixture[str]) -> N
 
     assert code == 2
     assert "--operation" in json.loads(capsys.readouterr().out)["error"]["message"]
+
+
+def _generate_from_root(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    accepted_dir: str,
+) -> tuple[int, dict[str, Any], Path]:
+    """Построить changelog без `--accepted`: принятая модель — из корня `FORGE_ACCEPTED_DIR`."""
+    operation = write_operation(tmp_path, subject="20261017-153000")
+    model = _model(tmp_path / "model.yaml", CUSTOMER + INVOICE)
+    out = tmp_path / "attempt-1" / "changelog.yaml"
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("FORGE_ACCEPTED_DIR", accepted_dir)
+    code = main(
+        ["generate", "--model", str(model), "--operation", str(operation), "--out", str(out)]
+    )
+    lines = [line for line in capsys.readouterr().out.splitlines() if line.strip()]
+    return code, json.loads(lines[0]), out
+
+
+def test_accepted_model_from_root(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / ".forge" / "db"
+    root.mkdir(parents=True)
+    _model(root / "model.yaml", CUSTOMER)
+
+    code, payload, _ = _generate_from_root(tmp_path, capsys, monkeypatch, ".forge/db")
+
+    assert code == 0
+    assert [(c["kind"], c["table"]) for c in payload["changesets"]] == [("create_table", "invoice")]
+    assert payload["logical_file_path"] == "db/changelog/20261017-153000.yaml"
+
+
+def test_invalid_accepted_root(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    code, payload, out = _generate_from_root(tmp_path, capsys, monkeypatch, "/srv/db")
+
+    assert code == 2
+    assert "FORGE_ACCEPTED_DIR" in json.dumps(payload, ensure_ascii=False)
+    assert not out.exists()

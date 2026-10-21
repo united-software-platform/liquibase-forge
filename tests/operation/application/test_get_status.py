@@ -53,6 +53,7 @@ def test_environment_failure_is_reported(tmp_path: Path) -> None:
         ("database", True),
         ("allowlist", True),
         ("runner", False),
+        ("accepted", True),
     ]
 
 

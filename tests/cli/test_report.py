@@ -139,3 +139,33 @@ def test_missing_backlog(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> 
     code, payload = _report(tmp_path, capsys, tmp_path / "tasks.md")
 
     assert (code, payload["error"]["kind"]) == (2, "operation_unavailable")
+
+
+def test_report_with_accepted_root_outside_db(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = legacy(tmp_path / "trail")
+    set_values(path, status="success", verdict__attempt_1="success")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("BACKLOG_ROOT", str(tmp_path / "trail"))
+    monkeypatch.setenv("FORGE_ACCEPTED_DIR", ".forge/db")
+
+    code = report.run(argparse.Namespace(operation=str(path)))
+    payload = json.loads(capsys.readouterr().out)
+
+    assert code == 0
+    assert payload["commit"]["files"] == [
+        ".forge/db/model.yaml",
+        f".forge/db/changelog/{STAMP}.yaml",
+        ".forge/db/changelog/master.yaml",
+    ]
+
+
+def test_report_with_invalid_accepted_root(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = legacy(tmp_path / "trail")
+    monkeypatch.setenv("BACKLOG_ROOT", str(tmp_path / "trail"))
+    monkeypatch.setenv("FORGE_ACCEPTED_DIR", "../db")
+
+    assert report.run(argparse.Namespace(operation=str(path))) == 2
