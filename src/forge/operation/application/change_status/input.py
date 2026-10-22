@@ -15,6 +15,7 @@ class StopOperationInput:
 
 @dataclass(frozen=True)
 class ResumeOperationInput:
-    """Беклог операции."""
+    """Беклог операции и согласие на удаления, которое даётся при продолжении."""
 
     operation_path: str
+    allow_drop: bool = False

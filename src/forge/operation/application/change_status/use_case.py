@@ -51,7 +51,11 @@ class StopOperationUseCase:
 
 
 class ResumeOperationUseCase:
-    """Читает операцию, возвращает агрегат в `running`, сохраняет статус."""
+    """Читает операцию, возвращает агрегат в `running`, сохраняет статус.
+
+    С `allow_drop` сначала даёт агрегату согласие на удаления и записывает его, затем статус:
+    недопустимое согласие — `OperationTransitionError`, беклог не меняется; повтор безопасен.
+    """
 
     def __init__(
         self,
@@ -65,6 +69,10 @@ class ResumeOperationUseCase:
 
     def execute(self, input: ResumeOperationInput) -> OperationView:
         operation = restore(self._reads.get(input.operation_path), self._factory)
+        if input.allow_drop:
+            operation.grant_drop()
         operation.resume()
+        if input.allow_drop:
+            self._writes.save_drop_consent(operation)
         self._writes.save(operation)
         return operation_view(operation)

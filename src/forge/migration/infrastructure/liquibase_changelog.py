@@ -17,9 +17,16 @@ from forge.migration.application.changelog_storage import (
     ChangelogUnreadableError,
 )
 from forge.migration.domain.changelog import Changelog, ChangeSet
-from forge.migration.domain.changes import AddColumn, CreateTable
+from forge.migration.domain.changes import (
+    AddColumn,
+    CreateTable,
+    DropColumn,
+    DropTable,
+    SchemaChange,
+)
 from forge.modeling.domain.column import Column
 from forge.modeling.domain.column_type import ColumnType, TypeKind
+from forge.modeling.domain.identifier import TableName
 from forge.modeling.domain.table import Table
 
 AUTHOR = "forge"
@@ -63,16 +70,40 @@ def render_changelog(changelog: Changelog) -> str:
 
 
 def _changeset(changelog: Changelog, item: ChangeSet) -> dict[str, Any]:
-    change = item.change
-    changes = _create_table(change.table) if isinstance(change, CreateTable) else _add(change)
-    return {
-        "changeSet": {
-            "id": item.id,
-            "author": AUTHOR,
-            "logicalFilePath": changelog.logical_file_path,
-            "changes": changes,
-        }
+    changeset: dict[str, Any] = {
+        "id": item.id,
+        "author": AUTHOR,
+        "logicalFilePath": changelog.logical_file_path,
+        "changes": _forward(item.change),
     }
+    # Откат создания Liquibase выводит сам; откат удаления задаётся явно по принятой модели
+    if isinstance(item.change, DropTable | DropColumn):
+        changeset["rollback"] = _restore(item.change)
+    return {"changeSet": changeset}
+
+
+def _forward(change: SchemaChange) -> list[dict[str, Any]]:
+    if isinstance(change, CreateTable):
+        return _create_table(change.table)
+    if isinstance(change, AddColumn):
+        return _add_column(change.table, change.column, change.nullable)
+    if isinstance(change, DropTable):
+        return [{"dropTable": {"tableName": change.table.name.value}}]
+    return [
+        {
+            "dropColumn": {
+                "tableName": change.table.value,
+                "columnName": change.column.name.value,
+            }
+        }
+    ]
+
+
+def _restore(change: DropTable | DropColumn) -> list[dict[str, Any]]:
+    """Откат удаления: структура объекта по принятой модели, данные не восстанавливаются."""
+    if isinstance(change, DropTable):
+        return _create_table(change.table)
+    return _add_column(change.table, change.column, change.nullable)
 
 
 def _create_table(table: Table) -> list[dict[str, Any]]:
@@ -90,12 +121,12 @@ def _create_table(table: Table) -> list[dict[str, Any]]:
     ]
 
 
-def _add(change: AddColumn) -> list[dict[str, Any]]:
+def _add_column(table: TableName, column: Column, nullable: bool) -> list[dict[str, Any]]:
     return [
         {
             "addColumn": {
-                "tableName": change.table.value,
-                "columns": [_column(change.column, change.nullable)],
+                "tableName": table.value,
+                "columns": [_column(column, nullable)],
             }
         }
     ]
@@ -140,9 +171,12 @@ class LiquibaseYamlChangelogReader:
 
 
 def _summary(document: Any) -> ChangelogSummary:
+    """Сводка по блокам `changes`; блоки `rollback` в неё не входят."""
     ids: list[str] = []
     tables: list[str] = []
     columns: list[tuple[str, str]] = []
+    dropped_tables: list[str] = []
+    dropped_columns: list[tuple[str, str]] = []
     paths: set[str] = set()
     for entry in document["databaseChangeLog"] or []:
         changeset = entry["changeSet"]
@@ -156,6 +190,11 @@ def _summary(document: Any) -> ChangelogSummary:
                 columns += [
                     (table, str(c["column"]["name"])) for c in change["addColumn"]["columns"]
                 ]
+            elif "dropTable" in change:
+                dropped_tables.append(str(change["dropTable"]["tableName"]))
+            elif "dropColumn" in change:
+                dropped = change["dropColumn"]
+                dropped_columns.append((str(dropped["tableName"]), str(dropped["columnName"])))
     if len(paths) > 1:
         raise TypeError(f"у changeset разные logicalFilePath: {sorted(paths)}")
     return ChangelogSummary(
@@ -163,4 +202,6 @@ def _summary(document: Any) -> ChangelogSummary:
         changeset_ids=tuple(ids),
         tables=tuple(tables),
         columns=tuple(columns),
+        dropped_tables=tuple(dropped_tables),
+        dropped_columns=tuple(dropped_columns),
     )

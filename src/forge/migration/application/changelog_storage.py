@@ -14,12 +14,14 @@ class ChangelogUnreadableError(Exception):
 
 @dataclass(frozen=True)
 class ChangelogSummary:
-    """Что changelog делает со схемой: `id` changeset и добавляемые объекты."""
+    """Что changelog делает со схемой: `id` changeset, добавляемые и удаляемые объекты."""
 
     logical_file_path: str | None
     changeset_ids: tuple[str, ...]
     tables: tuple[str, ...]
     columns: tuple[tuple[str, str], ...]
+    dropped_tables: tuple[str, ...] = ()
+    dropped_columns: tuple[tuple[str, str], ...] = ()
 
 
 class ChangelogWriterInterface(Protocol):

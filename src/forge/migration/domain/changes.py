@@ -1,4 +1,4 @@
-"""Изменения схемы, которые выражает changelog, и неаддитивные изменения модели."""
+"""Изменения схемы, которые выражает changelog, и неподдерживаемые изменения модели."""
 
 from __future__ import annotations
 
@@ -26,12 +26,28 @@ class AddColumn:
     nullable: bool
 
 
-SchemaChange = CreateTable | AddColumn
+@dataclass(frozen=True)
+class DropTable:
+    """Удаляемая таблица целиком; принятое определение нужно для отката."""
+
+    table: Table
 
 
 @dataclass(frozen=True)
-class NonAdditiveChange:
-    """Изменение модели, которое changelog первой поставки не выражает."""
+class DropColumn:
+    """Удаляемая колонка существующей таблицы; принятое определение нужно для отката."""
+
+    table: TableName
+    column: Column
+    nullable: bool
+
+
+SchemaChange = CreateTable | AddColumn | DropTable | DropColumn
+
+
+@dataclass(frozen=True)
+class UnsupportedChange:
+    """Изменение модели, которое changelog не выражает: смена типа, NULL или первичного ключа."""
 
     code: str
     table: str
@@ -39,11 +55,11 @@ class NonAdditiveChange:
     message: str
 
 
-class NonAdditiveChangeError(Exception):
-    """Модель попытки требует неаддитивных изменений: перечислены все."""
+class UnsupportedChangeError(Exception):
+    """Модель попытки требует неподдерживаемых изменений: перечислены все."""
 
-    def __init__(self, changes: Iterable[NonAdditiveChange]) -> None:
-        self.changes: tuple[NonAdditiveChange, ...] = tuple(changes)
+    def __init__(self, changes: Iterable[UnsupportedChange]) -> None:
+        self.changes: tuple[UnsupportedChange, ...] = tuple(changes)
         if not self.changes:
-            raise ValueError("NonAdditiveChangeError требует хотя бы одного изменения")
+            raise ValueError("UnsupportedChangeError требует хотя бы одного изменения")
         super().__init__("; ".join(change.message for change in self.changes))

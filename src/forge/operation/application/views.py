@@ -25,6 +25,7 @@ class OperationView:
     stamp: str
     intent: str
     mode: str
+    allow_drop: bool
     status: str
     stop_reason: str | None
     attempts: tuple[AttemptView, ...]
@@ -39,6 +40,7 @@ def operation_view(operation: Operation) -> OperationView:
         stamp=operation.stamp,
         intent=operation.intent,
         mode=operation.mode,
+        allow_drop=operation.allow_drop,
         status=operation.status.value,
         stop_reason=operation.stop_reason,
         attempts=tuple(

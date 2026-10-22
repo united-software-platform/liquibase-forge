@@ -62,9 +62,25 @@ class RollbackSummary:
     fallback_reason: str | None
 
 
+@dataclass(frozen=True)
+class DestructiveChange:
+    """Удаление итогового changelog: таблица и колонка; у удалённой таблицы колонка — `None`."""
+
+    table: str
+    column: str | None
+
+
 class AttemptResultsReaderInterface(Protocol):
-    """Результаты сверки и отката в каталоге попытки; нет файла — `None`."""
+    """Результаты попытки: сверка и откат в её каталоге, удаления её changelog."""
 
-    def reconcile(self, attempt_directory: str) -> ReconcileSummary | None: ...
+    def reconcile(self, attempt_directory: str) -> ReconcileSummary | None:
+        """Итог сверки; нет файла — `None`."""
+        ...
 
-    def rollback(self, attempt_directory: str) -> RollbackSummary | None: ...
+    def rollback(self, attempt_directory: str) -> RollbackSummary | None:
+        """Итог отката; нет файла — `None`."""
+        ...
+
+    def destructive(self, changelog: str) -> tuple[DestructiveChange, ...]:
+        """Удаления changelog; нет файла или он не читается — пустой перечень."""
+        ...

@@ -1,4 +1,4 @@
-<!-- template_version: 1.1.0 -->
+<!-- template_version: 1.2.0 -->
 ---
 template_version: "{{template_version}}"
 generated: "{{date}}"
@@ -16,6 +16,12 @@ mode: interactive
 confirmed:
   close: null
 {{/^auto}}
+{{#allow-drop}}
+allow_drop: true
+{{/allow-drop}}
+{{^allow-drop}}
+allow_drop: false
+{{/^allow-drop}}
 status: running
 stop_reason: null
 verdict:
@@ -99,7 +105,8 @@ CLI `forge`. Попытка при этом не расходуется, пов�
 {{^auto}}
   `--no-flag auto`
 {{/^auto}}
-  и записать его путь во фронтматтер в `backlog.attempt_1`
+  и `--flag allow-drop` при `allow_drop: true` во фронтматтере этого беклога, иначе
+  `--no-flag allow-drop`; записать путь беклога попытки во фронтматтер в `backlog.attempt_1`
   - Проверка: беклог `backlog/forge-apply/{{subject}}-1/tasks.md` порождён, путь записан
   - Выполнено ранее: беклог попытки 1 лежит, `backlog.attempt_1` заполнено
 - [ ] 2.2 Загрузить `{{runner}}` и исполнить беклог `backlog/forge-apply/{{subject}}-1/tasks.md`;
@@ -126,7 +133,8 @@ CLI `forge`. Попытка при этом не расходуется, пов�
 {{^auto}}
   `--no-flag auto`
 {{/^auto}}
-  и записать его путь во фронтматтер в `backlog.attempt_2`
+  и `--flag allow-drop` при `allow_drop: true` во фронтматтере этого беклога, иначе
+  `--no-flag allow-drop`; записать путь беклога попытки во фронтматтер в `backlog.attempt_2`
   - Проверка: беклог попытки 2 порождён, путь записан
   - Выполнено ранее: `forge status` называет подтверждённую попытку 1 либо беклог попытки 2
     лежит и `backlog.attempt_2` заполнено
@@ -156,7 +164,8 @@ CLI `forge`. Попытка при этом не расходуется, пов�
 {{^auto}}
   `--no-flag auto`
 {{/^auto}}
-  и записать его путь во фронтматтер в `backlog.attempt_3`
+  и `--flag allow-drop` при `allow_drop: true` во фронтматтере этого беклога, иначе
+  `--no-flag allow-drop`; записать путь беклога попытки во фронтматтер в `backlog.attempt_3`
   - Проверка: беклог попытки 3 порождён, путь записан
   - Выполнено ранее: `forge status` называет подтверждённую попытку 1 или 2 либо беклог
     попытки 3 лежит и `backlog.attempt_3` заполнено

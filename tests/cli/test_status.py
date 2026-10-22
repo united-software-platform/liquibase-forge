@@ -33,6 +33,22 @@ def _status(
     return code, json.loads(lines[0])
 
 
+def test_status_names_mode_and_consent(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    code, payload = _status(tmp_path, capsys, str(generate(tmp_path, allow_drop=True)))
+
+    assert code == 0
+    assert (payload["operation"]["mode"], payload["operation"]["allow_drop"]) == ("auto", True)
+
+
+def test_legacy_backlog_status_gives_consent_false(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    code, payload = _status(tmp_path, capsys, str(legacy(tmp_path)))
+
+    assert code == 0
+    assert payload["operation"]["allow_drop"] is False
+
+
 def test_operation_after_first_failure(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     path = generate(tmp_path)
     set_values(path, verdict__attempt_1="failure")

@@ -84,6 +84,7 @@ def report_payload(output: BuildReportOutput) -> dict[str, Any]:
         ],
         "backlogs": list(output.backlogs),
         "accepted": asdict(accepted) if accepted else None,
+        "destructive": [asdict(change) for change in output.destructive],
         "commit": (
             {
                 "files": list(output.commit_files),

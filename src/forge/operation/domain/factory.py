@@ -34,6 +34,7 @@ class OperationFactory:
         status: str,
         stop_reason: str | None,
         attempts: Sequence[tuple[str | None, str | None, str]],
+        allow_drop: bool = False,
     ) -> Operation:
         """`attempts` — по попытке 1..3: вердикт, путь беклога попытки, каталог попытки."""
         if not _STAMP.fullmatch(stamp):
@@ -53,4 +54,13 @@ class OperationFactory:
                     f"вердикт попытки {number} должен быть success, failure или null: {verdict!r}"
                 )
             restored.append(Attempt(number, verdict, backlog, directory))
-        return Operation(path, stamp, intent, mode, operation_status, stop_reason, tuple(restored))
+        return Operation(
+            path,
+            stamp,
+            intent,
+            mode,
+            operation_status,
+            stop_reason,
+            tuple(restored),
+            allow_drop=allow_drop,
+        )

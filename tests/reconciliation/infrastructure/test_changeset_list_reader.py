@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from forge.migration.domain.additive_diff import AdditiveDiff
 from forge.migration.domain.changelog import Changelog
+from forge.migration.domain.model_diff import ModelDiff
 from forge.migration.domain.stamp import OperationStamp
 from forge.migration.infrastructure.liquibase_changelog import LiquibaseYamlChangelogWriter
 from forge.reconciliation.application.contracts import ChangelogUnreadableError
@@ -19,7 +19,7 @@ FILE = "db/changelog/20261017-153000.yaml"
 
 
 def _write(path: Path, attempt: str) -> None:
-    changes = AdditiveDiff().between(model(), model(attempt)) if attempt else ()
+    changes = ModelDiff().between(model(), model(attempt)) if attempt else ()
     LiquibaseYamlChangelogWriter().write(
         str(path), Changelog(OperationStamp("20261017-153000"), changes)
     )

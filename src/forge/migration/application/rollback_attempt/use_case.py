@@ -54,8 +54,8 @@ class RollbackAttemptUseCase:
     Откат Liquibase выполняется, только если записи попытки — хвост журнала и changelog
     попытки на месте. Иначе, как и при ошибке Liquibase, целевая БД пересоздаётся и получает
     принятый changelog `accepted_master` — `master.yaml` корня принятого состояния. Затем
-    проверяется возврат, итог пишется в `rollback.json` каталога попытки. Ошибки окружения —
-    исключения контрактов.
+    проверяется возврат: добавленного changelog попытки в схеме нет, удалённое — снова есть.
+    Итог пишется в `rollback.json` каталога попытки. Ошибки окружения — исключения контрактов.
     """
 
     def __init__(self, dependencies: RollbackDependencies, accepted_master: str) -> None:
@@ -177,6 +177,12 @@ class RollbackAttemptUseCase:
         for table, column in summary.columns:
             present = self._deps.schema.column_exists(target, table, column)
             checks.append(CheckView("column_absent", not present, f"колонка {table}.{column}"))
+        for table in summary.dropped_tables:
+            present = self._deps.schema.table_exists(target, table)
+            checks.append(CheckView("table_present", present, f"таблица {table}"))
+        for table, column in summary.dropped_columns:
+            present = self._deps.schema.column_exists(target, table, column)
+            checks.append(CheckView("column_present", present, f"колонка {table}.{column}"))
         return checks
 
 

@@ -33,7 +33,7 @@ def backlog_cli() -> str:
     return found
 
 
-def generate(root: Path, stamp: str = STAMP, auto: bool = True) -> Path:
+def generate(root: Path, stamp: str = STAMP, auto: bool = True, allow_drop: bool = False) -> Path:
     """Породить беклог `forge-model` по текущему шаблону проекта в корне следа `root`."""
     subprocess.run(
         [
@@ -43,6 +43,7 @@ def generate(root: Path, stamp: str = STAMP, auto: bool = True) -> Path:
             "--subject", stamp,
             "--value", "intent=Справочник клиентов: id, email, имя",
             "--flag" if auto else "--no-flag", "auto",
+            "--flag" if allow_drop else "--no-flag", "allow-drop",
             "--root", str(root),
             "--templates", str(PROJECT_ROOT / "templates"),
         ],

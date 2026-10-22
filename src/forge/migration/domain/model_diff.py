@@ -1,45 +1,47 @@
-"""Добавляющая разница между принятой моделью и моделью попытки."""
+"""Разница между принятой моделью и моделью попытки."""
 
 from __future__ import annotations
 
 from forge.migration.domain.changes import (
     AddColumn,
     CreateTable,
-    NonAdditiveChange,
-    NonAdditiveChangeError,
+    DropColumn,
+    DropTable,
     SchemaChange,
+    UnsupportedChange,
+    UnsupportedChangeError,
 )
 from forge.modeling.domain.data_model import DataModel
 from forge.modeling.domain.table import Table
 
 
-class AdditiveDiff:
+class ModelDiff:
     """Доменный сервис: изменения схемы от принятой модели к модели попытки.
 
-    Разрешены новая таблица и новая колонка существующей таблицы. Удаление таблицы
-    или колонки, смена типа, итоговой допустимости NULL и первичного ключа — неаддитивные
-    изменения; они собираются все и бросаются одним исключением. Переименование неотличимо
-    от удаления и отклоняется как удаление.
+    Разрешены новая и удалённая таблица, новая и удалённая колонка существующей таблицы.
+    Удаление колонки первичного ключа не даёт `DropColumn`: смена ключа уже отклоняется.
+    Смена типа, итоговой допустимости NULL и первичного ключа — неподдерживаемые изменения;
+    они собираются все и бросаются одним исключением. Переименование неотличимо от удаления
+    и добавления и выражается ими.
+
+    Порядок: удалённые таблицы в порядке принятой модели, удалённые колонки по таблицам
+    и колонкам принятой модели, затем добавления в порядке модели попытки.
     """
 
     def between(self, accepted: DataModel, attempt: DataModel) -> tuple[SchemaChange, ...]:
-        rejected: list[NonAdditiveChange] = []
+        unsupported: list[UnsupportedChange] = []
         for table in accepted.tables:
-            if not attempt.has_table(table.name):
-                rejected.append(
-                    NonAdditiveChange(
-                        "table_removed",
-                        table.name.value,
-                        None,
-                        f"таблица {table.name} есть в принятой модели и удалена в модели попытки",
-                    )
-                )
-                continue
-            rejected += _table_changes(table, attempt.table(table.name))
-        if rejected:
-            raise NonAdditiveChangeError(rejected)
+            if attempt.has_table(table.name):
+                unsupported += _table_changes(table, attempt.table(table.name))
+        if unsupported:
+            raise UnsupportedChangeError(unsupported)
 
-        changes: list[SchemaChange] = []
+        changes: list[SchemaChange] = [
+            DropTable(table) for table in accepted.tables if not attempt.has_table(table.name)
+        ]
+        for table in accepted.tables:
+            if attempt.has_table(table.name):
+                changes += _dropped_columns(table, attempt.table(table.name))
         for table in attempt.tables:
             if not accepted.has_table(table.name):
                 changes.append(CreateTable(table))
@@ -53,26 +55,27 @@ class AdditiveDiff:
         return tuple(changes)
 
 
-def _table_changes(accepted: Table, attempt: Table) -> list[NonAdditiveChange]:
+def _dropped_columns(accepted: Table, attempt: Table) -> list[SchemaChange]:
+    names = {column.name for column in attempt.columns}
+    return [
+        DropColumn(accepted.name, column, accepted.is_nullable(column.name))
+        for column in accepted.columns
+        if column.name not in names and column.name not in accepted.primary_key
+    ]
+
+
+def _table_changes(accepted: Table, attempt: Table) -> list[UnsupportedChange]:
     table = accepted.name.value
     names = {column.name for column in attempt.columns}
-    rejected: list[NonAdditiveChange] = []
+    rejected: list[UnsupportedChange] = []
     for column in accepted.columns:
-        name = column.name.value
         if column.name not in names:
-            rejected.append(
-                NonAdditiveChange(
-                    "column_removed",
-                    table,
-                    name,
-                    f"колонка {table}.{name} есть в принятой модели и удалена в модели попытки",
-                )
-            )
             continue
+        name = column.name.value
         changed = attempt.column(column.name)
         if changed.type != column.type:
             rejected.append(
-                NonAdditiveChange(
+                UnsupportedChange(
                     "column_type_changed",
                     table,
                     name,
@@ -82,7 +85,7 @@ def _table_changes(accepted: Table, attempt: Table) -> list[NonAdditiveChange]:
         before, after = accepted.is_nullable(column.name), attempt.is_nullable(column.name)
         if before != after:
             rejected.append(
-                NonAdditiveChange(
+                UnsupportedChange(
                     "column_nullable_changed",
                     table,
                     name,
@@ -92,7 +95,7 @@ def _table_changes(accepted: Table, attempt: Table) -> list[NonAdditiveChange]:
             )
     if accepted.primary_key != attempt.primary_key:
         rejected.append(
-            NonAdditiveChange(
+            UnsupportedChange(
                 "primary_key_changed",
                 table,
                 None,

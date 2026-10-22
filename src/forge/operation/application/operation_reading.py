@@ -21,7 +21,7 @@ class SeveralOpenOperationsError(Exception):
 
 @dataclass(frozen=True)
 class OperationRecord:
-    """Значения фронтматтера беклога операции."""
+    """Значения фронтматтера беклога операции; беклог без `allow_drop` даёт `False`."""
 
     path: str
     stamp: str
@@ -32,6 +32,7 @@ class OperationRecord:
     verdicts: Mapping[int, str | None]
     backlogs: Mapping[int, str | None]
     directories: Mapping[int, str]
+    allow_drop: bool = False
 
 
 class OperationReadRepositoryInterface(Protocol):

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from forge.operation.application.accepted_state import (
     AcceptedFiles,
+    DestructiveChange,
     ReconcileSummary,
     RollbackSummary,
 )
@@ -31,7 +32,8 @@ class BuildReportOutput:
     """Отчёт: операция, итоговые модель и changelog, попытки, беклоги, файлы для коммита.
 
     `commit_files` — `None` у открытой операции; у закрытой — принятые файлы при `success`
-    и каталоги следа: операции и беклогов начатых попыток.
+    и каталоги следа: операции и беклогов начатых попыток. `destructive` — удаления итогового
+    changelog; нет итогового changelog — пусто.
     """
 
     operation: OperationView
@@ -41,3 +43,4 @@ class BuildReportOutput:
     backlogs: tuple[str, ...]
     accepted: AcceptedFiles | None
     commit_files: tuple[str, ...] | None
+    destructive: tuple[DestructiveChange, ...] = ()

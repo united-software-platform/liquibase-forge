@@ -8,8 +8,8 @@ import pytest
 import yaml
 
 from forge.migration.application.changelog_storage import ChangelogUnreadableError
-from forge.migration.domain.additive_diff import AdditiveDiff
 from forge.migration.domain.changelog import Changelog
+from forge.migration.domain.model_diff import ModelDiff
 from forge.migration.domain.stamp import OperationStamp
 from forge.migration.infrastructure.liquibase_changelog import (
     LiquibaseYamlChangelogReader,
@@ -36,7 +36,7 @@ PHONE = CUSTOMER.replace(
 
 
 def _changelog(accepted: DataModel, attempt: DataModel) -> Changelog:
-    return Changelog(STAMP, AdditiveDiff().between(accepted, attempt))
+    return Changelog(STAMP, ModelDiff().between(accepted, attempt))
 
 
 def test_create_table_with_ordered_primary_key() -> None:
@@ -174,3 +174,79 @@ def test_foreign_changelog_is_unreadable(tmp_path: Path, text: str) -> None:
 def test_missing_changelog_is_unreadable(tmp_path: Path) -> None:
     with pytest.raises(ChangelogUnreadableError):
         LiquibaseYamlChangelogReader().read(str(tmp_path / "changelog.yaml"))
+
+
+def test_drop_column_is_rendered_exactly_with_rollback() -> None:
+    text = render_changelog(_changelog(model(PHONE), model(CUSTOMER)))
+
+    assert text == (
+        "# Changelog операции 20261017-153000: построен forge generate, вручную не правится\n"
+        "databaseChangeLog:\n"
+        "- changeSet:\n"
+        "    id: 20261017-153000-01\n"
+        "    author: forge\n"
+        "    logicalFilePath: db/changelog/20261017-153000.yaml\n"
+        "    changes:\n"
+        "    - dropColumn:\n"
+        "        tableName: customer\n"
+        "        columnName: phone\n"
+        "    rollback:\n"
+        "    - addColumn:\n"
+        "        tableName: customer\n"
+        "        columns:\n"
+        "        - column:\n"
+        "            name: phone\n"
+        "            type: TEXT\n"
+        "            constraints:\n"
+        "              nullable: false\n"
+    )
+
+
+def test_drop_table_rolls_back_to_accepted_structure() -> None:
+    document = yaml.safe_load(
+        render_changelog(_changelog(model(CUSTOMER + LINES), model(CUSTOMER)))
+    )
+
+    (entry,) = document["databaseChangeLog"]
+    changeset = entry["changeSet"]
+    assert changeset["changes"] == [{"dropTable": {"tableName": "invoice_line"}}]
+    create, key = changeset["rollback"]
+    assert create["createTable"]["tableName"] == "invoice_line"
+    assert [c["column"] for c in create["createTable"]["columns"]] == [
+        {"name": "line_no", "type": "INTEGER", "constraints": {"nullable": False}},
+        {"name": "invoice_id", "type": "BIGINT", "constraints": {"nullable": False}},
+        {"name": "note", "type": "VARCHAR(80)"},
+    ]
+    assert key == {
+        "addPrimaryKey": {
+            "tableName": "invoice_line",
+            "columnNames": "invoice_id, line_no",
+            "constraintName": "pk_invoice_line",
+        }
+    }
+
+
+def test_additions_carry_no_explicit_rollback() -> None:
+    document = yaml.safe_load(render_changelog(_changelog(model(), model(CUSTOMER))))
+
+    assert "rollback" not in document["databaseChangeLog"][0]["changeSet"]
+
+
+def test_drop_rendering_is_byte_stable() -> None:
+    first = render_changelog(_changelog(model(CUSTOMER + LINES), model(PHONE)))
+    second = render_changelog(_changelog(model(CUSTOMER + LINES), model(PHONE)))
+
+    assert first == second
+
+
+def test_summary_lists_drops_but_not_rollback_blocks(tmp_path: Path) -> None:
+    path = tmp_path / "changelog.yaml"
+    LiquibaseYamlChangelogWriter().write(
+        str(path), _changelog(model(PHONE + LINES), model(CUSTOMER))
+    )
+
+    summary = LiquibaseYamlChangelogReader().read(str(path))
+
+    assert summary.dropped_tables == ("invoice_line",)
+    assert summary.dropped_columns == (("customer", "phone"),)
+    assert (summary.tables, summary.columns) == ((), ())

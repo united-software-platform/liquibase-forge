@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from forge.operation.application.accepted_state import DestructiveChange
 from forge.operation.application.build_report.input import BuildReportInput
 from forge.operation.application.build_report.output import BuildReportOutput
 from forge.operation.application.build_report.use_case import BuildReportUseCase
@@ -76,3 +77,47 @@ def test_open_operation_has_no_commit_files(tmp_path: Path, status: str) -> None
     set_values(path, status=status)
 
     assert _report(tmp_path, path).commit_files is None
+
+
+DROP_CHANGELOG = (
+    "databaseChangeLog:\n"
+    "- changeSet:\n"
+    "    id: 20261017-153000-01\n"
+    "    changes:\n"
+    "    - dropTable: {tableName: invoice_line}\n"
+    "- changeSet:\n"
+    "    id: 20261017-153000-02\n"
+    "    changes:\n"
+    "    - dropColumn: {tableName: customer, columnName: email}\n"
+)
+
+
+def test_failure_lists_drops_of_last_started_attempt(tmp_path: Path) -> None:
+    path = legacy(tmp_path / "trail")
+    _attempts(path, "failure", "failure")
+    set_values(path, status="failure")
+    (path.parent / "attempt-2").mkdir()
+    (path.parent / "attempt-2" / "changelog.yaml").write_text(DROP_CHANGELOG, encoding="utf-8")
+
+    assert _report(tmp_path, path).destructive == (
+        DestructiveChange("invoice_line", None),
+        DestructiveChange("customer", "email"),
+    )
+
+
+def test_success_lists_drops_of_accepted_changelog(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    accepted = tmp_path / "db" / "changelog" / f"{STAMP}.yaml"
+    accepted.parent.mkdir(parents=True)
+    accepted.write_text(DROP_CHANGELOG, encoding="utf-8")
+    path = legacy(tmp_path / "trail")
+    _attempts(path, "success")
+    set_values(path, status="success")
+
+    assert [d.table for d in _report(tmp_path, path).destructive] == ["invoice_line", "customer"]
+
+
+def test_no_attempts_give_empty_destructive(tmp_path: Path) -> None:
+    assert _report(tmp_path, legacy(tmp_path / "trail")).destructive == ()

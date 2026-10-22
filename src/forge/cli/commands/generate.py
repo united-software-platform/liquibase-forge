@@ -1,4 +1,4 @@
-"""Команда `forge generate`: changelog из добавляющей разницы моделей."""
+"""Команда `forge generate`: changelog из разницы моделей."""
 
 from __future__ import annotations
 
@@ -11,11 +11,12 @@ from forge.migration.application.generate_changelog.input import GenerateChangel
 from forge.migration.application.generate_changelog.output import GenerateChangelogOutput
 from forge.migration.application.generate_changelog.use_case import (
     AcceptedModelError,
+    DropNotAllowedError,
     GenerateChangelogUseCase,
     GenerateChangelogUseCaseInterface,
 )
 from forge.migration.application.operation_record import OperationRecordUnavailableError
-from forge.migration.domain.additive_diff import AdditiveDiff
+from forge.migration.domain.model_diff import ModelDiff
 from forge.migration.infrastructure.liquibase_changelog import LiquibaseYamlChangelogWriter
 from forge.migration.infrastructure.operation_record_reader import (
     FrontmatterOperationRecordReader,
@@ -47,12 +48,13 @@ def build_use_case() -> GenerateChangelogUseCaseInterface:
         FrontmatterOperationRecordReader(),
         LoadModelUseCase(YamlModelDraftReader(), DataModelFactory()),
         LiquibaseYamlChangelogWriter(),
-        AdditiveDiff(),
+        ModelDiff(),
     )
 
 
 def run(args: argparse.Namespace, use_case: GenerateChangelogUseCaseInterface | None = None) -> int:
-    """`0` — changelog записан, `1` — модель некорректна или неаддитивна, `2` — окружение."""
+    """`0` — changelog записан, `1` — модель некорректна или неподдерживаема, `2` — окружение
+    либо удаления в `auto` без согласия операции."""
     try:
         accepted = args.accepted or _accepted_model()
     except SettingsUnavailableError as error:
@@ -66,6 +68,14 @@ def run(args: argparse.Namespace, use_case: GenerateChangelogUseCaseInterface | 
         return environment_error("model_unreadable", str(error), model=error.path)
     except AcceptedModelError as error:
         return environment_error("accepted_model_invalid", str(error), accepted=accepted)
+    except DropNotAllowedError as error:
+        return environment_error(
+            "drop_not_allowed",
+            "удаления требуют согласия операции: беклог в режиме auto без allow_drop: true; "
+            f"удаляемые объекты: {error}; продолжить с согласием — /forge --mode auto --allow-drop",
+            objects=list(error.objects),
+            operation=args.operation,
+        )
     emit(_payload(output))
     return ExitCode.SUCCESS if output.generated else ExitCode.FAILURE
 

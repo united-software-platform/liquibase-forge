@@ -1,4 +1,4 @@
-"""Команда `forge resume --operation <беклог>`: продолжение остановленной операции."""
+"""Команда `forge resume --operation <беклог>`: продолжение операции, согласие на удаления."""
 
 from __future__ import annotations
 
@@ -24,6 +24,8 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
     """Добавить подкоманду `resume`."""
     parser = subparsers.add_parser("resume", add_help=False)
     parser.add_argument("--operation", required=True)
+    # Согласие на удаления остановленной операции в режиме auto; снять его нельзя
+    parser.add_argument("--allow-drop", action="store_true")
     parser.set_defaults(handler=run)
 
 
@@ -32,9 +34,10 @@ def build_use_case() -> ResumeOperationUseCaseInterface:
 
 
 def run(args: argparse.Namespace, use_case: ResumeOperationUseCaseInterface | None = None) -> int:
-    """`0` — операция продолжена, `1` — операция не остановлена, `2` — беклог не прочитать."""
+    """`0` — операция продолжена, `1` — не остановлена или согласие не применимо, `2` — беклог."""
+    request = ResumeOperationInput(args.operation, getattr(args, "allow_drop", False))
     try:
-        view = (use_case or build_use_case()).execute(ResumeOperationInput(args.operation))
+        view = (use_case or build_use_case()).execute(request)
     except OperationUnavailableError as error:
         return environment_error("operation_unavailable", str(error), operation=args.operation)
     except OperationTransitionError as error:

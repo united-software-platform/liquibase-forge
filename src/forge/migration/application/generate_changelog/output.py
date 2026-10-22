@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class ChangeSetView:
-    """Changeset в ответе: `id`, вид изменения, таблица и колонка для `add_column`."""
+    """Changeset в ответе: `id`, вид, таблица и колонка для `add_column` и `drop_column`."""
 
     id: str
     kind: str
@@ -25,8 +25,8 @@ class ModelViolationView:
 
 
 @dataclass(frozen=True)
-class NonAdditiveChangeView:
-    """Неаддитивное изменение модели попытки."""
+class UnsupportedChangeView:
+    """Неподдерживаемое изменение модели попытки: смена типа, NULL или первичного ключа."""
 
     code: str
     table: str
@@ -36,11 +36,11 @@ class NonAdditiveChangeView:
 
 @dataclass(frozen=True)
 class GenerateChangelogOutput:
-    """Итог: путь changelog при успехе, иначе нарушения модели или неаддитивные изменения."""
+    """Итог: путь changelog при успехе, иначе нарушения модели или неподдерживаемые изменения."""
 
     changelog_path: str | None
     logical_file_path: str
     changesets: tuple[ChangeSetView, ...]
     violations: tuple[ModelViolationView, ...]
-    non_additive: tuple[NonAdditiveChangeView, ...]
+    non_additive: tuple[UnsupportedChangeView, ...]
     generated: bool

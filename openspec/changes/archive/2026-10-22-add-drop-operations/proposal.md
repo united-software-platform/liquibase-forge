@@ -23,6 +23,10 @@ Liquibase Forge принимает только добавляющие изме�
   с `--mode auto`, шаблоны `forge-model` и `forge-apply` пишут `allow_drop` во фронтматтер.
   В режиме `auto` без согласия `forge generate` отклоняет удаления кодом `2` с видом ошибки
   `drop_not_allowed`: операция останавливается, попытка не расходуется.
+- Согласие можно дать при продолжении остановленной операции: `forge resume --allow-drop`
+  пишет `allow_drop: true` в беклог операции и беклоги попыток, навык вызывает его по ключу
+  `--allow-drop`; снять согласие нельзя, операции `running` ключ не меняет. Следующие попытки
+  порождаются по значению `allow_drop` фронтматтера беклога операции.
 - В режиме `interactive` удаления разрешены; стоп-знак перед накатом показывает их отдельным
   перечнем с предупреждением о потере данных.
 - `forge rollback` подтверждает возврат удалённых объектов проверками `table_present`
@@ -41,17 +45,19 @@ Liquibase Forge принимает только добавляющие изме�
 
 - `forge-migration`: построение changelog с удалениями и блоками `rollback`, порядок changeset,
   перечень отказов без удалений, отказ `drop_not_allowed`, проверка возврата удалённых объектов.
-- `forge-operation`: признак `allow_drop` в навыке и шаблонах, перечень удалений на стоп-знаке
-  перед накатом, условие гейта перед накатом без требования «только добавляющие изменения».
+- `forge-operation`: признак `allow_drop` в навыке и шаблонах, согласие при начале или продолжении
+  операции, перечень удалений на стоп-знаке перед накатом, условие гейта перед накатом без
+  требования «только добавляющие изменения».
 - `forge-operation-commands`: `allow_drop` в ответах `forge status` и `forge report`, перечень
-  `destructive` в отчёте.
+  `destructive` в отчёте, согласие на удаления при `forge resume --allow-drop` и исключение
+  для строки `allow_drop` в правиле «остановка и продолжение меняют только статус».
 
 ## Impact
 
 - Код: `src/forge/migration/` (domain: diff и изменения схемы; infrastructure: запись и чтение
   changelog, чтение фронтматтера; application: сценарии построения и отката),
   `src/forge/operation/` (чтение фронтматтера, представление операции, отчёт и контракт чтения
-  результатов попытки), `src/forge/cli/commands/` (`generate`, `status`, `report`).
+  результатов попытки), `src/forge/cli/commands/` (`generate`, `status`, `report`, `resume`).
 - Шаблоны `templates/forge-model.md`, `templates/forge-apply.md`, навык `.claude/skills/forge/SKILL.md`.
 - Документы: `docs/domain.md`, `docs/model-format.md`, `docs/migration.md`, `docs/architecture.md`,
   `docs/operation.md`.

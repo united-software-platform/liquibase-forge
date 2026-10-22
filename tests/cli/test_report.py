@@ -176,3 +176,46 @@ def test_report_with_invalid_accepted_root(
     monkeypatch.setenv("FORGE_ACCEPTED_DIR", "../db")
 
     assert report.run(argparse.Namespace(operation=str(path))) == 2
+
+
+def test_report_lists_destructive_changes(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    accepted = tmp_path / "db" / "changelog" / f"{STAMP}.yaml"
+    accepted.parent.mkdir(parents=True)
+    accepted.write_text(
+        "databaseChangeLog:\n"
+        "- changeSet:\n"
+        "    id: 20261017-153000-01\n"
+        "    changes:\n"
+        "    - dropTable: {tableName: invoice_line}\n"
+        "- changeSet:\n"
+        "    id: 20261017-153000-02\n"
+        "    changes:\n"
+        "    - dropColumn: {tableName: customer, columnName: email}\n",
+        encoding="utf-8",
+    )
+    path = legacy(tmp_path / "trail")
+    set_values(
+        path,
+        status="success",
+        verdict__attempt_1="success",
+        backlog__attempt_1=f"backlog/forge-apply/{STAMP}-1/tasks.md",
+    )
+
+    code, payload = _report(tmp_path, capsys, path)
+
+    assert code == 0
+    assert payload["operation"]["allow_drop"] is False
+    assert payload["destructive"] == [
+        {"table": "invoice_line", "column": None},
+        {"table": "customer", "column": "email"},
+    ]
+
+
+def test_report_without_drops_has_empty_destructive(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _, payload = _report(tmp_path, capsys, legacy(tmp_path / "trail"))
+
+    assert payload["destructive"] == []

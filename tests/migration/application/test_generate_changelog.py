@@ -10,14 +10,15 @@ from forge.migration.application.generate_changelog.input import GenerateChangel
 from forge.migration.application.generate_changelog.output import GenerateChangelogOutput
 from forge.migration.application.generate_changelog.use_case import (
     AcceptedModelError,
+    DropNotAllowedError,
     GenerateChangelogUseCase,
 )
 from forge.migration.application.operation_record import (
     OperationRecord,
     OperationRecordUnavailableError,
 )
-from forge.migration.domain.additive_diff import AdditiveDiff
 from forge.migration.domain.changelog import Changelog
+from forge.migration.domain.model_diff import ModelDiff
 from forge.migration.domain.stamp import OperationStamp
 from forge.modeling.application.load_model.use_case import LoadModelUseCase
 from forge.modeling.application.model_reading import ModelNotFoundError
@@ -29,13 +30,23 @@ STAMP = OperationStamp("20261017-153000")
 
 
 class _Operations:
-    def __init__(self, available: bool = True) -> None:
+    def __init__(
+        self, available: bool = True, mode: str | None = None, allow_drop: bool = False
+    ) -> None:
         self._available = available
+        self._mode = mode
+        self._allow_drop = allow_drop
 
     def read(self, path: str) -> OperationRecord:
         if not self._available:
             raise OperationRecordUnavailableError(f"нет беклога {path}")
-        return OperationRecord(STAMP, {1: None, 2: None, 3: None}, "trail")
+        return OperationRecord(
+            STAMP,
+            {1: None, 2: None, 3: None},
+            "trail",
+            mode=self._mode,
+            allow_drop=self._allow_drop,
+        )
 
 
 class _Writer:
@@ -78,7 +89,7 @@ def _run(
         operations or _Operations(),
         LoadModelUseCase(YamlModelDraftReader(), DataModelFactory()),
         writer or _Writer(),
-        AdditiveDiff(),
+        ModelDiff(),
     )
     return use_case.execute(
         GenerateChangelogInput(model_path, accepted_path, "op/tasks.md", "out/changelog.yaml")
@@ -122,16 +133,92 @@ def test_same_models_give_empty_changelog(tmp_path: Path) -> None:
     assert writer.written["out/changelog.yaml"].changes == ()
 
 
-def test_non_additive_changes_remove_old_changelog(tmp_path: Path) -> None:
+def test_unsupported_changes_remove_old_changelog(tmp_path: Path) -> None:
     writer = _Writer()
+    attempt = CUSTOMER.replace("type: string, length: 255", "type: text")
 
-    output = _run(tmp_path, CUSTOMER, accepted=CUSTOMER + INVOICE, writer=writer)
+    output = _run(tmp_path, attempt, accepted=CUSTOMER, writer=writer)
 
     assert output.generated is False
     assert output.changelog_path is None
-    assert [(c.code, c.table) for c in output.non_additive] == [("table_removed", "invoice")]
+    assert [(c.code, c.table) for c in output.non_additive] == [("column_type_changed", "customer")]
     assert writer.written == {}
     assert writer.removed == ["out/changelog.yaml"]
+
+
+WITHOUT_EMAIL = CUSTOMER.replace(
+    "      - {name: email, type: string, length: 255, nullable: false}\n", ""
+)
+
+
+def test_dropped_table_and_column_are_changesets(tmp_path: Path) -> None:
+    output = _run(tmp_path, WITHOUT_EMAIL, accepted=CUSTOMER + INVOICE)
+
+    assert output.generated is True
+    assert output.non_additive == ()
+    assert [(c.id, c.kind, c.table, c.column) for c in output.changesets] == [
+        ("20261017-153000-01", "drop_table", "invoice", None),
+        ("20261017-153000-02", "drop_column", "customer", "email"),
+    ]
+
+
+def test_drop_in_auto_without_consent_is_refused(tmp_path: Path) -> None:
+    writer = _Writer()
+
+    with pytest.raises(DropNotAllowedError) as caught:
+        _run(
+            tmp_path,
+            WITHOUT_EMAIL,
+            accepted=CUSTOMER + INVOICE,
+            writer=writer,
+            operations=_Operations(mode="auto", allow_drop=False),
+        )
+
+    assert caught.value.objects == ("invoice", "customer.email")
+    assert writer.written == {}
+    assert writer.removed == ["out/changelog.yaml"]
+
+
+def test_drop_in_auto_with_consent_is_generated(tmp_path: Path) -> None:
+    output = _run(
+        tmp_path,
+        CUSTOMER,
+        accepted=CUSTOMER + INVOICE,
+        operations=_Operations(mode="auto", allow_drop=True),
+    )
+
+    assert [(c.kind, c.table) for c in output.changesets] == [("drop_table", "invoice")]
+
+
+def test_drop_in_interactive_needs_no_consent(tmp_path: Path) -> None:
+    output = _run(
+        tmp_path,
+        CUSTOMER,
+        accepted=CUSTOMER + INVOICE,
+        operations=_Operations(mode="interactive"),
+    )
+
+    assert output.generated is True
+
+
+def test_additions_in_auto_need_no_consent(tmp_path: Path) -> None:
+    output = _run(
+        tmp_path, CUSTOMER + INVOICE, accepted=CUSTOMER, operations=_Operations(mode="auto")
+    )
+
+    assert [(c.kind, c.table) for c in output.changesets] == [("create_table", "invoice")]
+
+
+def test_model_violations_come_before_consent(tmp_path: Path) -> None:
+    output = _run(
+        tmp_path,
+        CUSTOMER.replace("type: uuid", "type: varchar"),
+        accepted=CUSTOMER + INVOICE,
+        operations=_Operations(mode="auto"),
+    )
+
+    assert output.generated is False
+    assert output.violations
 
 
 def test_invalid_attempt_model_is_refusal_with_violations(tmp_path: Path) -> None:
@@ -162,7 +249,7 @@ def test_unreadable_accepted_model_is_environment_error(tmp_path: Path) -> None:
         _Operations(),
         LoadModelUseCase(YamlModelDraftReader(), DataModelFactory()),
         _Writer(),
-        AdditiveDiff(),
+        ModelDiff(),
     )
 
     with pytest.raises(AcceptedModelError):
