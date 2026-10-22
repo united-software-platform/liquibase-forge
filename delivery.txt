@@ -1,0 +1,21 @@
+# Перечень поставки Liquibase Forge: что install.sh копирует в целевой проект.
+# Строка — «источник» либо «источник -> цель»; путь отсчитывается от корня репозитория forge
+# и корня проекта. Каталог копируется целиком. Пустые строки и строки с # пропускаются.
+
+# CLI forge — uv-подпроект tools/forge/: не конфликтует с pyproject.toml проекта
+src/forge -> tools/forge/src/forge
+pyproject.toml -> tools/forge/pyproject.toml
+uv.lock -> tools/forge/uv.lock
+
+# Шлюз Liquibase, подготовка окружения и обёртка запуска CLI
+tools/liquibase/gateway.py
+tools/forge-env
+
+# Сервисы БД и образ Liquibase
+docker/lbfr
+docker/liquibase
+
+# Навык forge и шаблоны беклогов его операций
+.claude/skills/forge
+templates/forge-model.md
+templates/forge-apply.md

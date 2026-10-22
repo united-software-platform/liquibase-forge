@@ -1,0 +1,3 @@
+# Liquibase Forge: файлы обмена со шлюзом и окружение uv подпроекта CLI — локальные
+.forge/
+tools/forge/.venv/

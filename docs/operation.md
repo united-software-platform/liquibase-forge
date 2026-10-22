@@ -42,7 +42,8 @@
 1. LLM получает вывод `forge report`.
 
 Инструкция навыка — [.claude/skills/forge/SKILL.md](../.claude/skills/forge/SKILL.md). Команды
-`forge` из беклогов выполняются как `uv run forge …` из корня проекта.
+`forge` из беклогов выполняются из корня проекта обёрткой `sh tools/forge-env/forge.sh …`: она
+запускает CLI и в репозитории forge, и в проекте, куда forge поставлен установщиком.
 
 ---
 
@@ -279,3 +280,4 @@ stateDiagram-v2
 | 1.0.3 | 2026-10-22 | OpenSpec change `add-drop-operations` | Claude Code | Claude Opus 5.5 | Раздел «Согласие на удаления»: `allow_drop` в режимах `auto` и `interactive`, отказ `drop_not_allowed`, перечень `destructive`; ключ `--allow-drop` навыка; `allow_drop` в `forge status` и `forge report`; шаблоны `forge-model` 1.2.0 и `forge-apply` 1.3.0 |
 | 1.0.4 | 2026-10-22 | OpenSpec change `add-drop-operations` | Claude Code | Claude Opus 5.5 | Согласие на удаления при продолжении: `forge resume --allow-drop` вместо неизменности признака, подсказка продолжения в отказе `drop_not_allowed`, строка `forge resume` в таблице команд, порождение попыток `forge-model` 1.2.0 по значению фронтматтера, ограничение |
 | 1.0.5 | 2026-10-22 | LBFR-015, OpenSpec change `add-model-relations` | Claude Code | Claude Opus 5.5 | Раздел «Согласие на удаления»: удаление набора уникальности или внешнего ключа не входит в перечень `destructive` и не требует `allow_drop` |
+| 1.0.6 | 2026-10-22 | LBFR-016, OpenSpec change `add-forge-installer` | Claude Code | Claude Opus 5.5 | Команды `forge` из беклогов выполняются обёрткой `sh tools/forge-env/forge.sh …` вместо прямого запуска через `uv run`: в установленном проекте CLI лежит в uv-подпроекте `tools/forge/` |

@@ -29,21 +29,22 @@ from urllib.parse import urlsplit
 #
 # Цели сборки образа здесь нет и быть не может: образ собирает пайплайн репозитория kit'а,
 # а проект получает его из реестра — в Makefile такой цели нет.
-#
-# Цели Liquibase Forge — отличие проекта от поставки kit'а. Через цели шлюза агент без Docker
-# и Liquibase исполняет накат и откат changelog: параметров они не принимают — те приходят
-# файлом .forge/liquibase-request.json. Цели forge-env-* готовят окружение: дописывают .env,
-# проверяют Compose, поднимают БД. Все они терминала не ждут и завершаются сами.
 ALLOWED_TARGETS = frozenset(
     {
         "init",
         "openspec-init",
         "help",
+        # >>> liquibase-forge
+        # Цели Liquibase Forge. Через цели шлюза агент без Docker и Liquibase исполняет накат
+        # и откат changelog: параметров они не принимают — те приходят файлом
+        # .forge/liquibase-request.json. Цели forge-env-* готовят окружение: дописывают .env,
+        # проверяют Compose, поднимают БД. Все они терминала не ждут и завершаются сами.
         "liquibase-update",
         "liquibase-rollback",
         "forge-env-sync",
         "forge-env-check",
         "forge-env-up",
+        # <<< liquibase-forge
     }
 )
 

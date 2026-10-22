@@ -29,10 +29,13 @@
 |-----|-----|
 | CLI `forge` и его слои | `src/forge/` |
 | Шлюз Liquibase для раннера | `tools/liquibase/` |
-| Подготовка окружения: цели `forge-env-*` | `tools/forge-env/` |
+| Подготовка окружения: цели `forge-env-*`, обёртка запуска CLI `forge.sh` | `tools/forge-env/` |
 | Сервисы БД и образ Liquibase | `docker/lbfr/` |
 | Навык `forge` | `.claude/skills/forge/` |
-| Тесты | `tests/` |
+| Установщик forge в целевой проект | `install.sh` |
+| Перечень поставки: что и куда копирует установщик | `delivery.txt` |
+| Тексты блоков forge в файлах kit'а | `install/blocks/` |
+| Тесты; установщика и перечня поставки — `tests/delivery/` | `tests/` |
 
 ### Документы и носители значений
 
@@ -64,23 +67,28 @@
 
 ## Отличия от поставки kit'а
 
-Четыре файла поставки SDD Developer Kit изменены под forge, и их контрольные суммы расходятся
-с `.sdd-kit-manifest.json`.
+Отличия forge в файлах SDD Developer Kit обрамлены строками-маркерами `# >>> liquibase-forge`
+и `# <<< liquibase-forge`. Текст между маркерами — копия фрагмента из
+[`install/blocks/`](./install/blocks/): тот же фрагмент установщик `install.sh` вносит в целевой
+проект. Правка отличия делается в двух местах одной правкой — во фрагменте и между маркерами
+файла; расхождение ловит тест `tests/delivery/test_blocks.py`. Текст вне маркеров совпадает
+с поставкой kit'а и под forge не правится.
 
-| Файл | Отличие | Основание |
-|------|---------|-----------|
-| [docker-compose.yml](./docker-compose.yml) | Секция `include:` файла [docker/lbfr/docker-compose.yaml](./docker/lbfr/docker-compose.yaml) | Окружение kit'а и инструмент lbfr описаны разными файлами: сервис агента `claude` остаётся в файле kit'а, сервисы инструмента живут в подкаталоге, и в корне Compose находит один файл |
-| [Makefile](./Makefile) | Цели `liquibase-update`, `liquibase-rollback` и `forge-env-*` | Раннер исполняет только цели `make`: через них агент без Docker запускает Liquibase и готовит окружение |
-| [.env.example](./.env.example) | Блоки переменных Liquibase Forge | Адреса и учётные данные БД, хостовый порт целевой БД, перечень тестовых БД, корень принятого состояния, версии образов |
-| [tools/host-runner/runner.py](./tools/host-runner/runner.py) | Цели шлюза и `forge-env-*` в `ALLOWED_TARGETS` | Раннер отказывает целям вне белого списка; поддержки дополнительного списка из `.env` в kit'е пока нет |
+| Файл | Фрагмент | Основание |
+|------|----------|-----------|
+| [docker-compose.yml](./docker-compose.yml) | [docker-compose.yml](./install/blocks/docker-compose.yml) | Окружение kit'а и инструмент lbfr описаны разными файлами: сервис агента `claude` остаётся в файле kit'а, сервисы инструмента подключаются секцией `include:` из [docker/lbfr/docker-compose.yaml](./docker/lbfr/docker-compose.yaml) |
+| [Makefile](./Makefile) | [Makefile](./install/blocks/Makefile) | Раннер исполняет только цели `make`: через них агент без Docker запускает Liquibase и готовит окружение |
+| [.env.example](./.env.example) | [env.example](./install/blocks/env.example) | Адреса и учётные данные БД, перечень тестовых БД, корень принятого состояния, версии образов |
+| [tools/host-runner/runner.py](./tools/host-runner/runner.py) | [runner.py](./install/blocks/runner.py) | Раннер отказывает целям вне белого списка `ALLOWED_TARGETS`; дополнительного списка из `.env` в kit'е пока нет |
+| [.gitignore](./.gitignore) | [gitignore](./install/blocks/gitignore) | Файлы обмена `.forge/` и окружение uv подпроекта `tools/forge/` локальны. Записи `/db/` и `backlog/*` стоят вне маркеров: они нужны только репозиторию разработки |
 
-После правки белого списка в `runner.py` раннер на хосте перезапускается: список читается при старте.
-
-Установщик kit'а слияния не делает и при обновлении перезаписывает эти файлы целиком. Порядок
-обновления такой: установщик запускается с тегом версии, после чего проектные версии четырёх файлов
-возвращаются из резервной копии, а манифест сохраняет контрольные суммы kit'а — так следующее
-обновление снова распознаёт отличия как конфликт. Требования к поставке — в спецификации
-[sdd-kit-delivery](./openspec/specs/sdd-kit-delivery/spec.md).
+Контрольные суммы четырёх файлов kit'а расходятся с `.sdd-kit-manifest.json`. Установщик kit'а
+слияния не делает и при обновлении перезаписывает эти файлы целиком, стирая блоки forge. Порядок
+обновления kit'а: переустановить kit, затем запустить установщик forge — он находит пропавшие
+блоки и вносит их заново. После правки белого списка в `runner.py` раннер на хосте
+перезапускается: список читается при старте. Требования к поставке kit'а — в спецификации
+[sdd-kit-delivery](./openspec/specs/sdd-kit-delivery/spec.md), к установке forge —
+в [forge-delivery](./openspec/specs/forge-delivery/spec.md).
 
 ---
 
@@ -110,6 +118,7 @@
 
 ```bash
 uv run pytest                 # модульные и интеграционные тесты
+uv run pytest tests/delivery  # установщик, перечень поставки и блоки forge
 uv run ruff check             # линтер
 uv run ruff format --check    # форматирование
 uv run mypy src               # типы
@@ -146,3 +155,4 @@ sh tools/make-lint/check.sh   # объём секций Makefile
 | Версия | Дата | Задача | Агент | Модель | Описание изменений |
 |--------|------|--------|-------|--------|--------------------|
 | 1.0.0 | 2026-10-21 | OpenSpec change `align-project-docs` | Claude Code | Claude Opus 5.5 | Начальное создание из образца навыка `project-docs`: устройство репозитория, репозиторий разработки, отличия от поставки kit'а с порядком обновления, карта блока бейджей, проверки, таблица норм. Материал перенесён из разделов «Назначение», «Подготовка окружения», «Проверки проекта» и «Отличия от поставки kit'а» прежнего `README.md` |
+| 1.0.1 | 2026-10-22 | LBFR-016, OpenSpec change `add-forge-installer` | Claude Code | Claude Opus 5.5 | Раздел «Отличия от поставки kit'а» переписан под маркированные блоки: отличия в пяти файлах обрамлены маркерами `liquibase-forge`, источник текстов — `install/blocks/`, таблица ссылается на фрагменты вместо описания отличий; порядок обновления kit'а — переустановка kit'а, затем установщик forge вместо возврата файлов из резервной копии. В «Устройство репозитория» добавлены `install.sh`, `delivery.txt`, `install/blocks/` и обёртка `tools/forge-env/forge.sh`, в «Проверки» — команда тестов установщика |
