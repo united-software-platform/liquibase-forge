@@ -38,6 +38,7 @@ def test_cli_code_goes_to_forge_subproject() -> None:
     assert entries["src/forge"] == "tools/forge/src/forge"
     assert entries["pyproject.toml"] == "tools/forge/pyproject.toml"
     assert entries["uv.lock"] == "tools/forge/uv.lock"
+    assert entries["VERSION"] == "tools/forge/VERSION"
 
 
 def test_tests_and_documents_are_not_delivered() -> None:

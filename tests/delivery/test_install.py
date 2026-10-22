@@ -11,12 +11,20 @@ import hashlib
 import os
 import pty
 import re
+import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
 
-from tests.delivery.support import BEGIN_MARKER, BLOCKS_DIR, END_MARKER, ROOT, marked_block
+from tests.delivery.support import (
+    BEGIN_MARKER,
+    BLOCKS_DIR,
+    END_MARKER,
+    ROOT,
+    delivery_entries,
+    marked_block,
+)
 
 INSTALLER = ROOT / "install.sh"
 KIT_FILES = ("Makefile", ".env.example", "docker-compose.yml", "tools/host-runner/runner.py")
@@ -150,6 +158,38 @@ def test_version_without_installer_is_refused(project: Path, tmp_path: Path) -> 
     assert _snapshot(project) == before
 
 
+def _source_copy(destination: Path) -> Path:
+    """Копия поставки forge: перечень, фрагменты блоков и источники `delivery.txt`."""
+    ignore = shutil.ignore_patterns("__pycache__", "*.pyc")
+    destination.mkdir()
+    shutil.copy2(ROOT / "delivery.txt", destination / "delivery.txt")
+    shutil.copytree(ROOT / "install", destination / "install", ignore=ignore)
+    for source, _ in delivery_entries():
+        (destination / source).parent.mkdir(parents=True, exist_ok=True)
+        if (ROOT / source).is_dir():
+            shutil.copytree(ROOT / source, destination / source, ignore=ignore)
+        else:
+            shutil.copy2(ROOT / source, destination / source)
+    return destination
+
+
+# None — файла VERSION в источнике нет
+@pytest.mark.parametrize("version", ["0.2\n", "v0.2.0\n", "", None])
+def test_unreadable_version_is_refused(project: Path, tmp_path: Path, version: str | None) -> None:
+    source = _source_copy(tmp_path / "forge")
+    if version is None:
+        (source / "VERSION").unlink()
+    else:
+        (source / "VERSION").write_text(version)
+    before = _snapshot(project)
+
+    result = _install(project, source=source)
+
+    assert result.returncode == 1
+    assert "VERSION" in result.stderr
+    assert _snapshot(project) == before
+
+
 # --- План ------------------------------------------------------------------------------------
 
 
@@ -249,12 +289,14 @@ def test_manifest_lists_files_and_five_blocks(project: Path) -> None:
     manifest = (project / ".forge-manifest.json").read_text()
 
     assert '"forge_ref": "local"' in manifest
-    assert re.search(r'"forge_version": "\d+\.\d+\.\d+"', manifest)
+    version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
+    assert f'"forge_version": "{version}"' in manifest
     assert re.search(r'"installed_at": "\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ"', manifest)
     blocks = manifest.split('"blocks"')[1]
     assert blocks.count('"sha256"') == 5
     assert '"path": "tools/forge/src/forge/cli/main.py"' in manifest
     assert '"path": "tools/forge/uv.lock"' in manifest
+    assert '"path": "tools/forge/VERSION"' in manifest
 
 
 def test_cli_code_does_not_touch_project(project: Path) -> None:

@@ -1,6 +1,6 @@
 # liquibase-forge
 
-[![версия Liquibase Forge из pyproject.toml](https://img.shields.io/badge/dynamic/toml?url=https%3A%2F%2Fraw.githubusercontent.com%2Funited-software-platform%2Fliquibase-forge%2Fmain%2Fpyproject.toml&query=%24.project.version&label=version&color=007EC6)](./pyproject.toml)
+[![версия Liquibase Forge из файла VERSION](https://img.shields.io/badge/dynamic/regex?url=https%3A%2F%2Fraw.githubusercontent.com%2Funited-software-platform%2Fliquibase-forge%2Fmain%2FVERSION&search=%28%5B%5Cd.%5D%2B%29&replace=v%241&label=version&color=007EC6)](./VERSION)
 [![лицензия MIT](https://img.shields.io/badge/license-MIT-007EC6)](./LICENSE)
 
 Liquibase Forge строит модель данных PostgreSQL по намерению, сформулированному агенту, проверяет её

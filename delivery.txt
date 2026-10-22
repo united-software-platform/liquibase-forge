@@ -6,6 +6,7 @@
 src/forge -> tools/forge/src/forge
 pyproject.toml -> tools/forge/pyproject.toml
 uv.lock -> tools/forge/uv.lock
+VERSION -> tools/forge/VERSION
 
 # Шлюз Liquibase, подготовка окружения и обёртка запуска CLI
 tools/liquibase/gateway.py

@@ -171,8 +171,10 @@ fi
 
 [ -f "$src/delivery.txt" ] && [ -d "$src/install/blocks" ] ||
 	fail "версия forge ${ref:-из $src} не поддерживает установку: в ней нет delivery.txt"
-forge_version=$(sed -n 's/^version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$src/pyproject.toml" 2>/dev/null | head -n 1)
-[ -n "$forge_version" ] || fail "в поставке нет номера версии: project.version в pyproject.toml"
+# Номер версии — первая строка VERSION источника, строго МАЖОР.МИНОР.ПАТЧ
+forge_version=$(head -n 1 "$src/VERSION" 2>/dev/null) || forge_version=""
+printf '%s\n' "$forge_version" | grep -Eqx '[0-9]+\.[0-9]+\.[0-9]+' ||
+	fail "поставка повреждена: в VERSION нет номера версии вида МАЖОР.МИНОР.ПАТЧ, прочитано «$forge_version»"
 
 # --- Прежняя установка -----------------------------------------------------------------------
 
