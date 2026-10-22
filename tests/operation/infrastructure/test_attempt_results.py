@@ -97,6 +97,16 @@ def test_destructive_skips_additions_and_rollback_blocks(tmp_path: Path) -> None
     assert JsonAttemptResultsReader().destructive(path) == ()
 
 
+def test_destructive_skips_constraint_drops(tmp_path: Path) -> None:
+    linked = CUSTOMER + "    unique:\n      - [email]\n"
+    changes = ModelDiff().between(model(linked), model(CUSTOMER))
+    path = _changelog(
+        tmp_path, render_changelog(Changelog(OperationStamp("20261017-153000"), changes))
+    )
+
+    assert JsonAttemptResultsReader().destructive(path) == ()
+
+
 def test_destructive_of_missing_or_foreign_file_is_empty(tmp_path: Path) -> None:
     reader = JsonAttemptResultsReader()
 

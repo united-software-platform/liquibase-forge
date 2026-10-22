@@ -70,7 +70,13 @@ def test_new_column(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
 
     assert code == 0
     assert payload["changesets"] == [
-        {"id": "20261017-153000-01", "kind": "add_column", "table": "customer", "column": "phone"}
+        {
+            "id": "20261017-153000-01",
+            "kind": "add_column",
+            "table": "customer",
+            "column": "phone",
+            "constraint": None,
+        }
     ]
 
 
@@ -97,7 +103,13 @@ def test_removed_column_is_drop_changeset_with_consent(
     assert code == 0
     assert payload["non_additive"] == []
     assert payload["changesets"] == [
-        {"id": "20261017-153000-01", "kind": "drop_column", "table": "customer", "column": "email"}
+        {
+            "id": "20261017-153000-01",
+            "kind": "drop_column",
+            "table": "customer",
+            "column": "email",
+            "constraint": None,
+        }
     ]
     assert out.exists()
 
@@ -297,3 +309,44 @@ def test_invalid_accepted_root(
     assert code == 2
     assert "FORGE_ACCEPTED_DIR" in json.dumps(payload, ensure_ascii=False)
     assert not out.exists()
+
+
+LINKED = INVOICE.replace(
+    "    primary_key: [number]",
+    "      - {name: customer_id, type: uuid}\n    primary_key: [number]\n"
+    "    foreign_keys:\n"
+    "      - {columns: [customer_id], references: {table: customer, columns: [id]}}",
+)
+
+
+def test_constraint_changesets(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    code, payload, out = _generate(tmp_path, capsys, LINKED + CUSTOMER)
+
+    assert code == 0
+    kinds = [(c["kind"], c["table"], c["column"]) for c in payload["changesets"]]
+    assert kinds == [
+        ("create_table", "invoice", None),
+        ("create_table", "customer", None),
+        ("add_foreign_key", "invoice", None),
+    ]
+    constraint = payload["changesets"][2]["constraint"]
+    assert constraint.startswith("fk_invoice_") and len(constraint) == len("fk_invoice_") + 8
+    (change,) = yaml.safe_load(out.read_text(encoding="utf-8"))["databaseChangeLog"][2][
+        "changeSet"
+    ]["changes"]
+    assert change["addForeignKeyConstraint"]["constraintName"] == constraint
+
+
+def test_foreign_key_drop_in_auto_without_consent(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    unlinked = LINKED.split("    foreign_keys:")[0]
+
+    code, payload, out = _generate(
+        tmp_path, capsys, unlinked + CUSTOMER, accepted=LINKED + CUSTOMER, allow_drop=False
+    )
+
+    assert code == 0
+    assert [c["kind"] for c in payload["changesets"]] == ["drop_foreign_key"]
+    (entry,) = yaml.safe_load(out.read_text(encoding="utf-8"))["databaseChangeLog"]
+    assert "addForeignKeyConstraint" in entry["changeSet"]["rollback"][0]

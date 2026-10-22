@@ -20,9 +20,12 @@ from forge.migration.application.operation_record import (
 from forge.migration.domain.changelog import Changelog
 from forge.migration.domain.model_diff import ModelDiff
 from forge.migration.domain.stamp import OperationStamp
+from forge.migration.infrastructure.liquibase_changelog import LiquibaseConstraintNaming
 from forge.modeling.application.load_model.use_case import LoadModelUseCase
 from forge.modeling.application.model_reading import ModelNotFoundError
 from forge.modeling.domain.factory import DataModelFactory
+from forge.modeling.domain.foreign_key import ForeignKey
+from forge.modeling.domain.identifier import ColumnName, TableName
 from forge.modeling.infrastructure.yaml_reader import YamlModelDraftReader
 from tests.migration.models import CUSTOMER, INVOICE
 
@@ -90,6 +93,7 @@ def _run(
         LoadModelUseCase(YamlModelDraftReader(), DataModelFactory()),
         writer or _Writer(),
         ModelDiff(),
+        LiquibaseConstraintNaming(),
     )
     return use_case.execute(
         GenerateChangelogInput(model_path, accepted_path, "op/tasks.md", "out/changelog.yaml")
@@ -250,6 +254,7 @@ def test_unreadable_accepted_model_is_environment_error(tmp_path: Path) -> None:
         LoadModelUseCase(YamlModelDraftReader(), DataModelFactory()),
         _Writer(),
         ModelDiff(),
+        LiquibaseConstraintNaming(),
     )
 
     with pytest.raises(AcceptedModelError):
@@ -270,3 +275,47 @@ def test_missing_operation_backlog(tmp_path: Path) -> None:
         _run(tmp_path, CUSTOMER, writer=writer, operations=_Operations(available=False))
 
     assert writer.written == {} and writer.removed == []
+
+
+LINKED = INVOICE.replace(
+    "    primary_key: [number]",
+    "      - {name: customer_id, type: uuid}\n    primary_key: [number]\n"
+    "    foreign_keys:\n"
+    "      - {columns: [customer_id], references: {table: customer, columns: [id]}}",
+)
+UNIQUE_EMAIL = CUSTOMER + "    unique:\n      - [email]\n"
+UNLINKED = LINKED.split("    foreign_keys:")[0]
+
+
+def test_constraint_changesets_name_constraint(tmp_path: Path) -> None:
+    naming = LiquibaseConstraintNaming()
+    output = _run(tmp_path, UNIQUE_EMAIL + LINKED, accepted=CUSTOMER + UNLINKED)
+    created = _run(tmp_path, UNIQUE_EMAIL + LINKED)
+
+    assert [(c.kind, c.table, c.column) for c in output.changesets] == [
+        ("add_unique", "customer", None),
+        ("add_foreign_key", "invoice", None),
+    ]
+    assert [c.constraint for c in output.changesets] == [
+        c.constraint for c in created.changesets if c.kind in ("add_unique", "add_foreign_key")
+    ]
+    assert all(c.constraint is None for c in created.changesets if c.kind == "create_table")
+    assert output.changesets[1].constraint == naming.foreign_key(
+        TableName("invoice"),
+        ForeignKey((ColumnName("customer_id"),), TableName("customer"), (ColumnName("id"),)),
+    )
+
+
+def test_constraint_drops_in_auto_need_no_consent(tmp_path: Path) -> None:
+    output = _run(
+        tmp_path,
+        CUSTOMER + UNLINKED,
+        accepted=UNIQUE_EMAIL + LINKED,
+        operations=_Operations(mode="auto", allow_drop=False),
+    )
+
+    assert output.generated is True
+    assert [(c.kind, c.table) for c in output.changesets] == [
+        ("drop_foreign_key", "invoice"),
+        ("drop_unique", "customer"),
+    ]

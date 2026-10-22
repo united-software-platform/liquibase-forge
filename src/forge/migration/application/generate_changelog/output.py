@@ -7,12 +7,14 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class ChangeSetView:
-    """Changeset в ответе: `id`, вид, таблица и колонка для `add_column` и `drop_column`."""
+    """Changeset в ответе: `id`, вид, таблица, колонка для `add_column` и `drop_column`
+    и имя ограничения для видов набора уникальности и внешнего ключа."""
 
     id: str
     kind: str
     table: str
     column: str | None
+    constraint: str | None = None
 
 
 @dataclass(frozen=True)

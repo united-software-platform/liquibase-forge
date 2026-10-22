@@ -25,11 +25,15 @@ class JournalReaderInterface(Protocol):
 
 
 class SchemaProbeInterface(Protocol):
-    """Есть ли таблица или колонка в схеме `public`."""
+    """Есть ли таблица, колонка или ограничение в схеме `public`."""
 
     def table_exists(self, database: TargetDatabase, table: str) -> bool: ...
 
     def column_exists(self, database: TargetDatabase, table: str, column: str) -> bool: ...
+
+    def constraint_exists(self, database: TargetDatabase, table: str, name: str, kind: str) -> bool:
+        """Есть ли у таблицы ограничение с таким именем вида `foreign_key` или `unique`."""
+        ...
 
 
 class DatabaseRecreatorInterface(Protocol):

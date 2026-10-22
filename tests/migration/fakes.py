@@ -89,6 +89,7 @@ class FakeDatabase:
     journal: list[JournalEntry] = field(default_factory=list)
     tables: set[str] = field(default_factory=set)
     columns: set[tuple[str, str]] = field(default_factory=set)
+    constraints: set[tuple[str, str, str]] = field(default_factory=set)
     rollback_code: int = 0
     master_exists: bool = False
     summary: ChangelogSummary | None = SUMMARY
@@ -112,6 +113,9 @@ class FakeDatabase:
 
     def column_exists(self, database: TargetDatabase, table: str, column: str) -> bool:
         return (table, column) in self.columns
+
+    def constraint_exists(self, database: TargetDatabase, table: str, name: str, kind: str) -> bool:
+        return (kind, table, name) in self.constraints
 
     def recreate(self, database: TargetDatabase) -> None:
         self.calls.append("recreate")

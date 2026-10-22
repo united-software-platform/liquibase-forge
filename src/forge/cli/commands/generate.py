@@ -17,7 +17,10 @@ from forge.migration.application.generate_changelog.use_case import (
 )
 from forge.migration.application.operation_record import OperationRecordUnavailableError
 from forge.migration.domain.model_diff import ModelDiff
-from forge.migration.infrastructure.liquibase_changelog import LiquibaseYamlChangelogWriter
+from forge.migration.infrastructure.liquibase_changelog import (
+    LiquibaseConstraintNaming,
+    LiquibaseYamlChangelogWriter,
+)
 from forge.migration.infrastructure.operation_record_reader import (
     FrontmatterOperationRecordReader,
 )
@@ -49,6 +52,7 @@ def build_use_case() -> GenerateChangelogUseCaseInterface:
         LoadModelUseCase(YamlModelDraftReader(), DataModelFactory()),
         LiquibaseYamlChangelogWriter(),
         ModelDiff(),
+        LiquibaseConstraintNaming(),
     )
 
 
@@ -89,7 +93,13 @@ def _payload(output: GenerateChangelogOutput) -> dict[str, Any]:
         "changelog": output.changelog_path,
         "logical_file_path": output.logical_file_path,
         "changesets": [
-            {"id": c.id, "kind": c.kind, "table": c.table, "column": c.column}
+            {
+                "id": c.id,
+                "kind": c.kind,
+                "table": c.table,
+                "column": c.column,
+                "constraint": c.constraint,
+            }
             for c in output.changesets
         ],
         "violations": [

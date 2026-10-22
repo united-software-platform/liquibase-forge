@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Protocol
 
 from forge.migration.application.changelog_storage import ChangelogWriterInterface
+from forge.migration.application.constraint_naming import ConstraintNamingInterface
 from forge.migration.application.generate_changelog.input import GenerateChangelogInput
 from forge.migration.application.generate_changelog.output import (
     ChangeSetView,
@@ -16,9 +17,12 @@ from forge.migration.application.operation_record import OperationRecordReaderIn
 from forge.migration.domain.changelog import Changelog, ChangeSet
 from forge.migration.domain.changes import (
     AddColumn,
+    AddForeignKey,
+    AddUnique,
     CreateTable,
     DropColumn,
     DropTable,
+    DropUnique,
     SchemaChange,
     UnsupportedChangeError,
 )
@@ -57,6 +61,7 @@ class GenerateChangelogUseCase:
     не пишется, прежний файл удаляется, чтобы устаревший changelog нельзя было накатить.
     Удаления в режиме `auto` без согласия операции — `DropNotAllowedError`, прежний файл тоже
     удаляется; проверка идёт после проверок модели, чтобы агент сначала получил нарушения.
+    Удаление набора уникальности или внешнего ключа данных не удаляет и согласия не требует.
     Ошибки окружения — исключения: `OperationRecordUnavailableError`, `ModelUnreadableError`
     модели попытки и `AcceptedModelError`.
     """
@@ -67,11 +72,13 @@ class GenerateChangelogUseCase:
         models: LoadModelUseCaseInterface,
         writer: ChangelogWriterInterface,
         diff: ModelDiff,
+        naming: ConstraintNamingInterface,
     ) -> None:
         self._operations = operations
         self._models = models
         self._writer = writer
         self._diff = diff
+        self._naming = naming
 
     def execute(self, input: GenerateChangelogInput) -> GenerateChangelogOutput:
         record = self._operations.read(input.operation_path)
@@ -102,7 +109,7 @@ class GenerateChangelogUseCase:
         return GenerateChangelogOutput(
             changelog_path=input.out_path,
             logical_file_path=changelog.logical_file_path,
-            changesets=tuple(_changeset_view(item) for item in changelog.changesets),
+            changesets=tuple(self._changeset_view(item) for item in changelog.changesets),
             violations=(),
             non_additive=(),
             generated=True,
@@ -119,6 +126,28 @@ class GenerateChangelogUseCase:
         except ModelUnreadableError as error:
             raise AcceptedModelError(str(error)) from None
 
+    def _changeset_view(self, item: ChangeSet) -> ChangeSetView:
+        change = item.change
+        if isinstance(change, CreateTable):
+            return ChangeSetView(item.id, "create_table", change.table.name.value, None)
+        if isinstance(change, AddColumn):
+            return ChangeSetView(
+                item.id, "add_column", change.table.value, change.column.name.value
+            )
+        if isinstance(change, DropTable):
+            return ChangeSetView(item.id, "drop_table", change.table.name.value, None)
+        if isinstance(change, DropColumn):
+            return ChangeSetView(
+                item.id, "drop_column", change.table.value, change.column.name.value
+            )
+        if isinstance(change, AddUnique | DropUnique):
+            kind = "add_unique" if isinstance(change, AddUnique) else "drop_unique"
+            name = self._naming.unique(change.table, change.unique)
+            return ChangeSetView(item.id, kind, change.table.value, None, name)
+        kind = "add_foreign_key" if isinstance(change, AddForeignKey) else "drop_foreign_key"
+        name = self._naming.foreign_key(change.table, change.key)
+        return ChangeSetView(item.id, kind, change.table.value, None, name)
+
 
 def _dropped_objects(changes: tuple[SchemaChange, ...]) -> tuple[str, ...]:
     """Удаляемые объекты: таблица либо `таблица.колонка`."""
@@ -129,17 +158,6 @@ def _dropped_objects(changes: tuple[SchemaChange, ...]) -> tuple[str, ...]:
         elif isinstance(change, DropColumn):
             objects.append(f"{change.table.value}.{change.column.name.value}")
     return tuple(objects)
-
-
-def _changeset_view(item: ChangeSet) -> ChangeSetView:
-    change = item.change
-    if isinstance(change, CreateTable):
-        return ChangeSetView(item.id, "create_table", change.table.name.value, None)
-    if isinstance(change, AddColumn):
-        return ChangeSetView(item.id, "add_column", change.table.value, change.column.name.value)
-    if isinstance(change, DropTable):
-        return ChangeSetView(item.id, "drop_table", change.table.name.value, None)
-    return ChangeSetView(item.id, "drop_column", change.table.value, change.column.name.value)
 
 
 def _refused(

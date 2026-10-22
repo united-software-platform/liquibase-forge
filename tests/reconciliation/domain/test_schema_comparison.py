@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from forge.reconciliation.domain.actual_schema import ActualColumn, ActualTable
+from forge.reconciliation.domain.actual_schema import ActualColumn, ActualForeignKey, ActualTable
 from forge.reconciliation.domain.schema_comparison import SchemaComparison
 from tests.migration.models import CUSTOMER, INVOICE, model
 from tests.reconciliation.schemas import column, customer, schema
@@ -130,3 +130,81 @@ def test_order_of_discrepancies_is_stable() -> None:
         ("table_unexpected", "a_extra", ""),
         ("table_unexpected", "b_extra", ""),
     ]
+
+
+LINKED_MODEL = (
+    (
+        CUSTOMER + "      - {name: tenant_id, type: bigint}\n      - {name: code, type: text}\n"
+    ).replace("    primary_key: [id]\n", "")
+    + ("    primary_key: [id]\n    unique:\n      - [email]\n      - [tenant_id, code]\n")
+    + """
+  - name: invoice
+    columns:
+      - {name: id, type: bigint}
+      - {name: customer_id, type: uuid}
+    primary_key: [id]
+    foreign_keys:
+      - {columns: [customer_id], references: {table: customer, columns: [id]}}
+"""
+)
+TO_CUSTOMER = ActualForeignKey(("customer_id",), "customer", ("id",))
+
+
+def _linked_customer(*unique: tuple[str, ...]) -> ActualTable:
+    columns = customer(column("tenant_id", "bigint"), column("code", "text")).columns
+    return ActualTable("customer", columns, ("id",), unique)
+
+
+def _invoice(*keys: ActualForeignKey) -> ActualTable:
+    columns = (column("id", "bigint", nullable=False), column("customer_id", "uuid"))
+    return ActualTable("invoice", columns, ("id",), foreign_keys=keys)
+
+
+def _linked(*tables: ActualTable) -> list[tuple[str, ...]]:
+    return _found(*tables, tables_of_model=LINKED_MODEL)
+
+
+def test_matching_constraints_by_content() -> None:
+    # Порядок колонок набора в БД другой, имя ограничения не сравнивается
+    assert _linked(_linked_customer(("code", "tenant_id"), ("email",)), _invoice(TO_CUSTOMER)) == []
+
+
+def test_constraints_missing() -> None:
+    assert _linked(_linked_customer(("email",)), _invoice()) == [
+        ("unique_missing", "customer", "", "[tenant_id, code]", "absent"),
+        ("foreign_key_missing", "invoice", "", "[customer_id] → customer[id]", "absent"),
+    ]
+
+
+def test_constraints_unexpected() -> None:
+    extra = ActualForeignKey(("id",), "customer", ("tenant_id",))
+    table = _linked_customer(("email",), ("tenant_id", "code"), ("tenant_id",), ("code",))
+
+    assert _linked(table, _invoice(TO_CUSTOMER, extra)) == [
+        ("unique_unexpected", "customer", "", "absent", "[code]"),
+        ("unique_unexpected", "customer", "", "absent", "[tenant_id]"),
+        ("foreign_key_unexpected", "invoice", "", "absent", "[id] → customer[tenant_id]"),
+    ]
+
+
+def test_constraints_follow_primary_key_in_order() -> None:
+    table = ActualTable("customer", _linked_customer().columns, None, (("code",),))
+
+    assert [kind for kind, *_ in _linked(table, _invoice(TO_CUSTOMER))] == [
+        "primary_key_mismatch",
+        "unique_missing",
+        "unique_missing",
+        "unique_unexpected",
+    ]
+
+
+def test_missing_table_gives_no_constraint_discrepancies() -> None:
+    assert _linked(_linked_customer(("email",), ("tenant_id", "code"))) == [
+        ("table_missing", "invoice", "", "present", "absent")
+    ]
+
+
+def test_constraint_comparison_is_stable() -> None:
+    tables = (_linked_customer(("code",)), _invoice(ActualForeignKey(("id",), "x", ("y",))))
+
+    assert _linked(*tables) == _linked(*tables)

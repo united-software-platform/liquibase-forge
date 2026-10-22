@@ -11,6 +11,9 @@ from forge.shared.infrastructure.postgres import PostgresConnector
 # Служебная БД сервера, из-под которой целевая БД удаляется и создаётся заново
 MAINTENANCE_DATABASE = "postgres"
 
+# Вид ограничения сводки changelog → `pg_constraint.contype`
+_CONTYPES = {"foreign_key": "f", "unique": "u"}
+
 
 class PsycopgJournalReader:
     """Реализация чтения журнала Liquibase."""
@@ -31,7 +34,7 @@ class PsycopgJournalReader:
 
 
 class PsycopgSchemaProbe:
-    """Реализация проверки наличия таблиц и колонок в схеме `public`."""
+    """Реализация проверки наличия таблиц, колонок и ограничений в схеме `public`."""
 
     def __init__(self, connector: PostgresConnector) -> None:
         self._connector = connector
@@ -51,6 +54,18 @@ class PsycopgSchemaProbe:
                 "SELECT 1 FROM information_schema.columns "
                 "WHERE table_schema = 'public' AND table_name = %s AND column_name = %s",
                 (table, column),
+            ).fetchone()
+        return row is not None
+
+    def constraint_exists(self, database: TargetDatabase, table: str, name: str, kind: str) -> bool:
+        with self._connector.connect(database) as connection:
+            row = connection.execute(
+                "SELECT 1 FROM pg_catalog.pg_constraint c "
+                "JOIN pg_catalog.pg_class t ON t.oid = c.conrelid "
+                "JOIN pg_catalog.pg_namespace n ON n.oid = t.relnamespace "
+                "WHERE n.nspname = 'public' AND t.relname = %s AND c.conname = %s "
+                "AND c.contype = %s",
+                (table, name, _CONTYPES[kind]),
             ).fetchone()
         return row is not None
 

@@ -6,6 +6,7 @@ import psycopg
 import pytest
 
 from forge.modeling.domain.column_type import parse_column_type
+from forge.reconciliation.domain.actual_schema import ActualForeignKey
 from forge.reconciliation.domain.journal_check import JournalRecord
 from forge.reconciliation.infrastructure.postgres_introspection import (
     PsycopgJournalRecordsReader,
@@ -83,3 +84,31 @@ def test_journal_records(test_database: TestDatabase) -> None:
         JournalRecord("a", "forge", "f.yaml", "EXECUTED"),
         JournalRecord("b", "forge", "f.yaml", "MARK_RAN"),
     )
+
+
+def test_foreign_keys_and_unique_constraints(test_database: TestDatabase) -> None:
+    connector, target = _parts(test_database)
+    with psycopg.connect(test_database.conninfo) as connection:
+        connection.execute(
+            "CREATE TABLE line (invoice_id bigint, line_no integer, code text, tenant integer,"
+            " CONSTRAINT line_pk PRIMARY KEY (invoice_id, line_no),"
+            " CONSTRAINT line_code UNIQUE (tenant, code))"
+        )
+        connection.execute(
+            "CREATE TABLE payment (id bigint PRIMARY KEY, l integer, i bigint, parent_id bigint,"
+            " CONSTRAINT any_fk FOREIGN KEY (l, i) REFERENCES line (line_no, invoice_id),"
+            " CONSTRAINT self_fk FOREIGN KEY (parent_id) REFERENCES payment (id))"
+        )
+        connection.execute("CREATE UNIQUE INDEX lonely_index ON payment (l)")
+
+    actual = PsycopgSchemaIntrospector(connector).read(target)
+
+    line, payment = actual.table("line"), actual.table("payment")
+    assert line is not None and payment is not None
+    assert (line.unique, line.foreign_keys) == ((("tenant", "code"),), ())
+    # Уникальный индекс без ограничения не читается
+    assert payment.unique == ()
+    assert set(payment.foreign_keys) == {
+        ActualForeignKey(("l", "i"), "line", ("line_no", "invoice_id")),
+        ActualForeignKey(("parent_id",), "payment", ("id",)),
+    }

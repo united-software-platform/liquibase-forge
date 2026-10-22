@@ -13,6 +13,15 @@ class ChangelogUnreadableError(Exception):
 
 
 @dataclass(frozen=True)
+class ConstraintRef:
+    """Ограничение в changelog: вид `foreign_key` или `unique`, таблица и имя."""
+
+    kind: str
+    table: str
+    name: str
+
+
+@dataclass(frozen=True)
 class ChangelogSummary:
     """Что changelog делает со схемой: `id` changeset, добавляемые и удаляемые объекты."""
 
@@ -22,6 +31,8 @@ class ChangelogSummary:
     columns: tuple[tuple[str, str], ...]
     dropped_tables: tuple[str, ...] = ()
     dropped_columns: tuple[tuple[str, str], ...] = ()
+    constraints: tuple[ConstraintRef, ...] = ()
+    dropped_constraints: tuple[ConstraintRef, ...] = ()
 
 
 class ChangelogWriterInterface(Protocol):

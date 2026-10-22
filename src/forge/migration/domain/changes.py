@@ -6,13 +6,15 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 
 from forge.modeling.domain.column import Column
+from forge.modeling.domain.foreign_key import ForeignKey
 from forge.modeling.domain.identifier import TableName
 from forge.modeling.domain.table import Table
+from forge.modeling.domain.unique_set import UniqueSet
 
 
 @dataclass(frozen=True)
 class CreateTable:
-    """Новая таблица целиком: колонки, NOT NULL и первичный ключ."""
+    """Новая таблица: колонки, NOT NULL и первичный ключ; её ограничения — отдельные изменения."""
 
     table: Table
 
@@ -28,7 +30,10 @@ class AddColumn:
 
 @dataclass(frozen=True)
 class DropTable:
-    """Удаляемая таблица целиком; принятое определение нужно для отката."""
+    """Удаляемая таблица; принятое определение с наборами уникальности нужно для отката.
+
+    Внешние ключи таблицы и внешние ключи на неё удаляются отдельными изменениями.
+    """
 
     table: Table
 
@@ -42,7 +47,48 @@ class DropColumn:
     nullable: bool
 
 
-SchemaChange = CreateTable | AddColumn | DropTable | DropColumn
+@dataclass(frozen=True)
+class AddUnique:
+    """Новый набор уникальности таблицы."""
+
+    table: TableName
+    unique: UniqueSet
+
+
+@dataclass(frozen=True)
+class DropUnique:
+    """Удаляемый набор уникальности существующей таблицы; набор нужен для отката."""
+
+    table: TableName
+    unique: UniqueSet
+
+
+@dataclass(frozen=True)
+class AddForeignKey:
+    """Новый внешний ключ таблицы."""
+
+    table: TableName
+    key: ForeignKey
+
+
+@dataclass(frozen=True)
+class DropForeignKey:
+    """Удаляемый внешний ключ принятой модели; ключ нужен для отката."""
+
+    table: TableName
+    key: ForeignKey
+
+
+SchemaChange = (
+    CreateTable
+    | AddColumn
+    | DropTable
+    | DropColumn
+    | AddUnique
+    | DropUnique
+    | AddForeignKey
+    | DropForeignKey
+)
 
 
 @dataclass(frozen=True)
