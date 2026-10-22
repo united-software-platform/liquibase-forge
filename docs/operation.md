@@ -67,7 +67,8 @@ CLI по признаку `allow_drop` беклога операции, а не 
 - **Статус и отчёт.** `forge status` и `forge report` называют `allow_drop` рядом с режимом. Отчёт
   перечисляет в `destructive` удаления итогового changelog — принятого при `success`, иначе
   последней начатой попытки; у удалённой таблицы `column: null`. Нет итогового changelog или
-  удалений в нём — перечень пуст.
+  удалений в нём — перечень пуст. Удаление набора уникальности или внешнего ключа данных
+  не удаляет: в перечень оно не входит и согласия `allow_drop` не требует.
 
 > **Внимание:** откат возвращает только структуру удалённых таблиц и колонок, данные не
 > восстанавливаются. Принятый changelog с удалением при переносе на рабочую БД удалит данные —
@@ -277,3 +278,4 @@ stateDiagram-v2
 | 1.0.2 | 2026-10-21 | OpenSpec change `commit-operation-trail` | Claude Code | Claude Opus 5.5 | В раздел «Итоговый отчёт» добавлен подраздел «Файлы для коммита»: в целевом проекте коммитится след закрытой операции вместе с принятым состоянием, состав `commit.files` для `success`, `failure` и открытой операции, оговорка о данных подключения в выводе Liquibase; в ограничения добавлено: `BACKLOG_ROOT` для операций forge не поддерживается |
 | 1.0.3 | 2026-10-22 | OpenSpec change `add-drop-operations` | Claude Code | Claude Opus 5.5 | Раздел «Согласие на удаления»: `allow_drop` в режимах `auto` и `interactive`, отказ `drop_not_allowed`, перечень `destructive`; ключ `--allow-drop` навыка; `allow_drop` в `forge status` и `forge report`; шаблоны `forge-model` 1.2.0 и `forge-apply` 1.3.0 |
 | 1.0.4 | 2026-10-22 | OpenSpec change `add-drop-operations` | Claude Code | Claude Opus 5.5 | Согласие на удаления при продолжении: `forge resume --allow-drop` вместо неизменности признака, подсказка продолжения в отказе `drop_not_allowed`, строка `forge resume` в таблице команд, порождение попыток `forge-model` 1.2.0 по значению фронтматтера, ограничение |
+| 1.0.5 | 2026-10-22 | LBFR-015, OpenSpec change `add-model-relations` | Claude Code | Claude Opus 5.5 | Раздел «Согласие на удаления»: удаление набора уникальности или внешнего ключа не входит в перечень `destructive` и не требует `allow_drop` |
