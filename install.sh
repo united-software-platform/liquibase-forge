@@ -102,7 +102,7 @@ done
 
 # --- Окружение -------------------------------------------------------------------------------
 
-for tool in mktemp sed awk find cp; do
+for tool in mktemp sed awk find cp cmp; do
 	command -v "$tool" >/dev/null 2>&1 || fail_usage "не найдена утилита $tool"
 done
 if command -v sha256sum >/dev/null 2>&1; then
@@ -296,21 +296,32 @@ insert_block() {
 		' "$target" >"$out"
 		;;
 	runner)
+		# Блок — оператор сразу за последним присваиванием ALLOWED_TARGETS верхнего уровня:
+		# конец оператора — строка, на которой баланс скобок без строк и комментариев сходится
 		[ -f "$target" ] || return 3
 		awk -v fragment="$fragment" -v b="$indent$MARK_BEGIN" -v e="$indent$MARK_END" '
 			function emit(  l) { print b; while ((getline l < fragment) > 0) print l; close(fragment); print e }
-			state == 0 && /^ALLOWED_TARGETS = frozenset\(/ { state = 1; print; next }
-			state == 1 {
-				s = $0; sub(/^[ \t]+/, "", s)
-				if (s ~ /^}/) {
-					# Без запятой после последнего элемента вставка склеила бы строки литерала
-					if (previous !~ /[,{][ \t]*$/) { failed = 1; exit }
-					emit(); state = 2; print; next
+			function depth(s,  i, c, d, q) {
+				d = 0; q = ""
+				for (i = 1; i <= length(s); i++) {
+					c = substr(s, i, 1)
+					if (q != "") { if (c == "\\") i++; else if (c == q) q = ""; continue }
+					if (c == "\"" || c == sq) q = c
+					else if (c == "#") break
+					else if (index("([{", c)) d++
+					else if (index(")]}", c)) d--
 				}
-				if (s != "" && s !~ /^#/) previous = s
+				return d
 			}
-			{ print }
-			END { if (failed || state != 2) exit 3 }
+			BEGIN { sq = sprintf("%c", 39) }
+			{ line[NR] = $0 }
+			/^ALLOWED_TARGETS[ \t]*=/ { start = NR }
+			END {
+				if (!start) exit 3
+				for (i = start; i <= NR; i++) { d += depth(line[i]); if (d == 0) { stop = i; break } }
+				if (!stop) exit 3
+				for (i = 1; i <= NR; i++) { print line[i]; if (i == stop) emit() }
+			}
 		' "$target" >"$out" || return 3
 		;;
 	esac
@@ -319,6 +330,8 @@ insert_block() {
 refuse_block() {
 	echo "Ошибка: в $1 не найдено место вставки блока forge — файл не изменён, установка не выполнена." >&2
 	echo "Вставьте блок вручную и запустите установщик повторно:" >&2
+	[ "$place" != runner ] ||
+		echo "блок — отдельные строки без отступа сразу после присваивания ALLOWED_TARGETS." >&2
 	printf '%s%s\n' "$3" "$MARK_BEGIN"
 	cat "$2"
 	printf '%s%s\n' "$3" "$MARK_END"
@@ -354,13 +367,23 @@ while IFS='|' read -r name target place; do
 	elif [ "$1" -eq 1 ] && [ "$2" -eq 1 ] && [ "$3" -lt "$4" ]; then
 		awk -v lb="$3" -v le="$4" 'NR > lb && NR < le' "$target" >"$work/current_block"
 		current=$(sha_of "$work/current_block")
-		{
-			head -n "$3" "$target"
-			cat "$fragment"
-			tail -n "+$4" "$target"
-		} >"$out"
+		if [ "$place" = runner ]; then
+			# Блок раннера ставится заново за присваиванием: так переносится и блок, который
+			# версии до 0.3.1 вставляли внутрь литерала. Подоболочка хранит place и target цикла
+			awk -v lb="$3" -v le="$4" 'NR < lb || NR > le' "$target" >"$work/without_block"
+			(insert_block "$place" "$work/without_block" "$fragment" "$indent" "$out") ||
+				refuse_block "$target" "$fragment" "$indent"
+		else
+			{
+				head -n "$3" "$target"
+				cat "$fragment"
+				tail -n "+$4" "$target"
+			} >"$out"
+		fi
 		if [ "$current" = "$new_sum" ]; then
 			status=same
+			# Тот же текст блока на другом месте — перенос, а не «без изменений»
+			cmp -s "$out" "$target" || status=update
 		elif [ "$current" = "$(old_sum blocks "$target")" ]; then
 			status=update
 		else

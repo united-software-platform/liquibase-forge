@@ -11,6 +11,7 @@ import hashlib
 import os
 import pty
 import re
+import runpy
 import shutil
 import subprocess
 from pathlib import Path
@@ -29,6 +30,12 @@ from tests.delivery.support import (
 INSTALLER = ROOT / "install.sh"
 KIT_FILES = ("Makefile", ".env.example", "docker-compose.yml", "tools/host-runner/runner.py")
 BLOCK_PATTERN = re.compile(r"[ \t]*# >>> liquibase-forge\n.*?# <<< liquibase-forge\n", re.S)
+RUNNER_FIXTURES = ROOT / "tests" / "delivery" / "fixtures" / "runner"
+RUNNER = "tools/host-runner/runner.py"
+KIT_TARGETS = frozenset({"init", "openspec-init", "help"})
+FORGE_TARGETS = frozenset(
+    {"liquibase-update", "liquibase-rollback", "forge-env-sync", "forge-env-check", "forge-env-up"}
+)
 
 
 def _kit_text(path: str) -> str:
@@ -202,6 +209,7 @@ def test_unrecognized_insertion_place_is_refused(project: Path) -> None:
 
     assert result.returncode == 1
     assert "tools/host-runner/runner.py" in result.stderr
+    assert "сразу после присваивания ALLOWED_TARGETS" in result.stderr
     assert (BLOCKS_DIR / "runner.py").read_text() in result.stdout
     assert _snapshot(project) == before
 
@@ -416,10 +424,105 @@ def test_end_of_install_names_next_steps(project: Path) -> None:
 
 def test_unmarked_forge_differences_are_reported(project: Path) -> None:
     runner = project / "tools" / "host-runner" / "runner.py"
-    runner.write_text(runner.read_text().replace('"help",\n', '"help",\n        "forge-env-up",\n'))
+    # Отличия forge, внесённые владельцем вручную: текст фрагмента без маркеров
+    runner.write_text(runner.read_text() + (BLOCKS_DIR / "runner.py").read_text())
 
     result = _install(project, "--dry-run")
 
     assert result.returncode == 0
     assert "вне маркеров" in result.stdout
     assert "  tools/host-runner/runner.py" in result.stdout
+
+
+# --- Блок раннера: формы белого списка и перенос блока 0.3.0 ---------------------------------
+
+
+def _runner_globals(path: Path) -> dict[str, object]:
+    """Пространство имён раннера без запуска сервера: main() вызывается только из __main__."""
+    return runpy.run_path(str(path), run_name="forge_runner_under_test")
+
+
+def _without_block(text: str) -> str:
+    """Текст файла без маркеров forge и строк между ними."""
+    return BLOCK_PATTERN.sub("", text)
+
+
+def _write_forge_manifest(project: Path, block_sum: str) -> None:
+    """Манифест прежней установки, в котором известна только сумма блока раннера."""
+    (project / ".forge-manifest.json").write_text(
+        "{\n"
+        '  "files": [],\n'
+        '  "blocks": [\n'
+        f'    {{"path": "{RUNNER}", "sha256": "{block_sum}"}}\n'
+        "  ]\n"
+        "}\n"
+    )
+
+
+@pytest.mark.parametrize("form", ["kit-1.5.0.py", "multiline.py", "dictionary.py"])
+def test_runner_whitelist_form_gets_forge_targets(project: Path, form: str) -> None:
+    original = (RUNNER_FIXTURES / form).read_text()
+    runner = project / RUNNER
+    runner.write_text(original)
+
+    result = _install(project)
+
+    assert result.returncode == 0, result.stderr
+    text = runner.read_text()
+    compile(text, str(runner), "exec")
+    names = _runner_globals(runner)
+    allowed = names["ALLOWED_TARGETS"]
+    assert isinstance(allowed, frozenset)
+    assert allowed >= KIT_TARGETS | FORGE_TARGETS
+    if "TARGET_VARIABLES" in names:
+        before = _runner_globals(RUNNER_FIXTURES / form)["TARGET_VARIABLES"]
+        after = names["TARGET_VARIABLES"]
+        assert isinstance(before, dict) and isinstance(after, dict)
+        assert {target: after[target] for target in FORGE_TARGETS} == dict.fromkeys(
+            FORGE_TARGETS, frozenset()
+        )
+        assert {target: after[target] for target in before} == before
+    assert _without_block(text) == original
+
+
+def test_runner_block_follows_kit_whitelist_line(project: Path) -> None:
+    runner = project / RUNNER
+    runner.write_text((RUNNER_FIXTURES / "kit-1.5.0.py").read_text())
+
+    assert _install(project).returncode == 0
+
+    lines = runner.read_text().splitlines()
+    assignment = next(i for i, line in enumerate(lines) if line.startswith("ALLOWED_TARGETS ="))
+    assert lines[assignment + 1] == BEGIN_MARKER
+
+
+def test_runner_block_of_forge_0_3_0_is_moved_out_of_literal(project: Path) -> None:
+    installed = (RUNNER_FIXTURES / "multiline-forge-0.3.0.py").read_text()
+    runner = project / RUNNER
+    runner.write_text(installed)
+    _write_forge_manifest(project, _sha256(marked_block(installed)))
+
+    result = _install(project)
+
+    assert result.returncode == 0, result.stderr
+    assert f"обновить: блок forge в {RUNNER}" in result.stdout
+    text = runner.read_text()
+    compile(text, str(runner), "exec")
+    allowed = _runner_globals(runner)["ALLOWED_TARGETS"]
+    assert isinstance(allowed, frozenset)
+    assert allowed >= KIT_TARGETS | FORGE_TARGETS
+    assert f"    {BEGIN_MARKER}" not in text
+    assert _without_block(text) == (RUNNER_FIXTURES / "multiline.py").read_text()
+
+
+def test_owner_edited_runner_block_inside_literal_needs_confirmation(project: Path) -> None:
+    runner = project / RUNNER
+    runner.write_text((RUNNER_FIXTURES / "multiline-forge-0.3.0.py").read_text())
+    _write_forge_manifest(project, _sha256("правка владельца\n"))
+    before = _snapshot(project)
+
+    result = _install(project)
+
+    assert result.returncode == 1
+    assert f"правка владельца, перезаписать: блок forge в {RUNNER}" in result.stdout
+    assert _snapshot(project) == before

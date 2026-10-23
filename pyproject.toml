@@ -54,8 +54,9 @@ target-version = "py312"
 line-length = 100
 src = ["src", "tests", "tools"]
 # Раннер — файл поставки kit'а: его стиль задаёт kit, а не этот проект. Фрагменты блоков
-# install/blocks/ — куски чужих файлов, а не модули: вне своего файла они не разбираются
-extend-exclude = ["tools/host-runner", "install/blocks"]
+# install/blocks/ — куски чужих файлов, а не модули: вне своего файла они не разбираются.
+# Фикстуры runner.py в tests/delivery/fixtures/ — копии файла kit'а и его форм у владельцев
+extend-exclude = ["tools/host-runner", "install/blocks", "tests/delivery/fixtures"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "BLE", "SIM", "RUF"]
