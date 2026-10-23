@@ -55,9 +55,9 @@
 
 ## 5. Настройка GitHub (по команде владельца)
 
-- [ ] 5.1 Завести ключ: сгенерировать ключ во временном каталоге, `gh repo deploy-key add --allow-write --title release`, `gh secret set RELEASE_DEPLOY_KEY`, затем удалить временный каталог. Проверка: `gh repo deploy-key list` показывает `release` с записью, `gh secret list` — `RELEASE_DEPLOY_KEY`, файлов ключа на диске нет
-- [ ] 5.2 Применить ruleset скриптом `tools/github/apply-ruleset.sh .github/rulesets/main.json`, повторный запуск ничего не меняет. Если форма `bypass_actors` для `DeployKey` не принята — поправить файл и тест (открытый вопрос design.md). Проверка: `gh api repos/{owner}/{repo}/rules/branches/main` перечисляет `pull_request`, `required_status_checks`, `non_fast_forward`, `deletion`
-- [ ] 5.3 Проверить критерий на одноразовом PR: ветка с намеренно падающим тестом, PR в `main`, после красного `checks` `gh pr merge --merge` отклоняется. Затем закрыть PR и удалить ветку. Проверка: отказ GitHub записан в отчёт, PR закрыт без слияния, ветки нет
+- [x] 5.1 Завести ключ: сгенерировать ключ во временном каталоге, `gh repo deploy-key add --allow-write --title release`, `gh secret set RELEASE_DEPLOY_KEY`, затем удалить временный каталог. Проверка: `gh repo deploy-key list` показывает `release` с записью, `gh secret list` — `RELEASE_DEPLOY_KEY`, файлов ключа на диске нет
+- [x] 5.2 Применить ruleset скриптом `tools/github/apply-ruleset.sh .github/rulesets/main.json`, повторный запуск ничего не меняет. Если форма `bypass_actors` для `DeployKey` не принята — поправить файл и тест (открытый вопрос design.md). Проверка: `gh api repos/{owner}/{repo}/rules/branches/main` перечисляет `pull_request`, `required_status_checks`, `non_fast_forward`, `deletion`
+- [x] 5.3 Проверить критерий на одноразовом PR: ветка с намеренно падающим тестом, PR в `main`, после красного `checks` `gh pr merge --merge` отклоняется. Затем закрыть PR и удалить ветку. Проверка: отказ GitHub записан в отчёт, PR закрыт без слияния, ветки нет
 
 ## Workflow follow-up
 
