@@ -31,12 +31,15 @@ jobs:
 
     steps:
       - name: Получение репозитория
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # Версия uv совпадает с контейнером агента: новый uv может сменить формат uv.lock,
       # и проверка покраснела бы без правки репозитория.
+      #
+      # Версия действия точная: начиная с v8 Astral не публикует плавающие теги vN и vN.M,
+      # а релизы неизменяемы — содержимое закреплённой версии нельзя подменить переносом тега.
       - name: Установка uv и Python
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@v10.3.2
         with:
           version: "0.12.7"
           python-version: "3.12"

@@ -1,4 +1,5 @@
-"""Workflow проверок `.github/workflows/checks.yml`: триггеры, права и совпадение с CONTRIBUTING.md.
+"""Workflow проверок `.github/workflows/checks.yml`: триггеры, права, совпадение с CONTRIBUTING.md
+и закрепление версий действий.
 
 Перечень проверок живёт в двух местах — в разделе «Проверки» `CONTRIBUTING.md` для локального
 прогона и в шагах workflow для CI. Тест сравнивает их, чтобы новая проверка не попала только
@@ -15,16 +16,31 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = ROOT / ".github" / "workflows" / "checks.yml"
+RELEASE_WORKFLOW = ROOT / ".github" / "workflows" / "release.yml"
 CONTRIBUTING = ROOT / "CONTRIBUTING.md"
 
 # Установка зависимостей нужна только CI: локально окружение uv уже есть
 CI_ONLY = {"uv sync --frozen"}
 
 
-def _workflow() -> dict[Any, Any]:
-    loaded = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+def _load(path: Path) -> dict[Any, Any]:
+    loaded = yaml.safe_load(path.read_text(encoding="utf-8"))
     assert isinstance(loaded, dict)
     return loaded
+
+
+def _workflow() -> dict[Any, Any]:
+    return _load(WORKFLOW)
+
+
+def _action_refs(path: Path, action: str) -> set[str]:
+    """Версии, на которых workflow закрепляет действие `action`, по всем шагам всех job'ов."""
+    return {
+        step["uses"].split("@", 1)[1]
+        for job in _load(path)["jobs"].values()
+        for step in job.get("steps", [])
+        if step.get("uses", "").split("@", 1)[0] == action
+    }
 
 
 def _steps() -> list[dict[str, Any]]:
@@ -101,3 +117,23 @@ def test_environment_for_skipped_tests_is_not_set() -> None:
 def test_makefile_check_uses_norm() -> None:
     assert "sh tools/make-lint/check.sh" in _workflow_commands()
     assert not any("--max-lines" in command for command in _workflow_commands())
+
+
+# --- Версии действий -------------------------------------------------------------------------
+
+
+def test_checkout_version_is_same_in_both_workflows() -> None:
+    # Иначе обновление одного файла молча оставит второй на старой среде исполнения
+    checks = _action_refs(WORKFLOW, "actions/checkout")
+    release = _action_refs(RELEASE_WORKFLOW, "actions/checkout")
+
+    assert len(checks) == 1
+    assert checks == release
+
+
+def test_setup_uv_is_pinned_to_exact_release() -> None:
+    # С v8 у setup-uv нет плавающих тегов vN и vN.M: укороченная версия упала бы уже на GitHub
+    refs = _action_refs(WORKFLOW, "astral-sh/setup-uv")
+
+    assert len(refs) == 1
+    assert all(re.fullmatch(r"v\d+\.\d+\.\d+", ref) for ref in refs)
