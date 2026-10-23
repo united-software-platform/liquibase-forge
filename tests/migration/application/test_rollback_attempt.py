@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from forge.migration.application.changelog_storage import ChangelogSummary, ConstraintRef
 from forge.migration.application.database import JournalEntry
 from forge.migration.application.liquibase_gateway import GatewayResult, GatewayUnavailableError
 from forge.migration.application.rollback_attempt.input import RollbackAttemptInput
@@ -204,3 +205,99 @@ def test_unavailable_gateway_propagates() -> None:
 
     with pytest.raises(GatewayUnavailableError):
         _rollback(db)
+
+
+DROP_SUMMARY = ChangelogSummary(
+    LOGICAL,
+    ("20261017-153000-01", "20261017-153000-02"),
+    (),
+    (),
+    dropped_tables=("invoice_line",),
+    dropped_columns=(("customer", "email"),),
+)
+
+
+def test_dropped_objects_not_restored_fail_return_check() -> None:
+    db = FakeDatabase(summary=DROP_SUMMARY)
+    db.apply_attempt(2)
+
+    output, _ = _rollback(db)
+
+    failed = {c.check for c in output.checks if not c.passed}
+    assert failed == {"table_present", "column_present"}
+    assert output.verified is False
+
+
+def test_restored_dropped_objects_pass_return_check() -> None:
+    db = FakeDatabase(summary=DROP_SUMMARY)
+    db.apply_attempt(2)
+
+    def restoring(changelog: str, database: TargetDatabase, count: int) -> GatewayResult:
+        db.journal = db.journal[:-count]
+        db.tables = {"customer", "invoice_line"}
+        db.columns = {("customer", "id"), ("customer", "email")}
+        return GatewayResult("req", 0, "", "")
+
+    db.rollback = restoring  # type: ignore[method-assign]
+
+    output, writer = _rollback(db)
+
+    passed = {c.check for c in output.checks if c.passed}
+    assert {"journal_clean", "table_present", "column_present"} <= passed
+    assert output.verified is True
+    assert writer.documents["trail/attempt-1/rollback.json"]["verified"] is True
+
+
+ADDED_FK = ConstraintRef("foreign_key", "invoice", "fk_invoice_0a1b2c3d")
+ADDED_UQ = ConstraintRef("unique", "customer", "uq_customer_4e5f6a7b")
+DROPPED_FK = ConstraintRef("foreign_key", "payment", "fk_payment_8c9d0e1f")
+DROPPED_UQ = ConstraintRef("unique", "customer", "uq_customer_2a3b4c5d")
+CONSTRAINT_SUMMARY = ChangelogSummary(
+    LOGICAL,
+    ("20261017-153000-01", "20261017-153000-02", "20261017-153000-03", "20261017-153000-04"),
+    (),
+    (),
+    constraints=(ADDED_UQ, ADDED_FK),
+    dropped_constraints=(DROPPED_FK, DROPPED_UQ),
+)
+
+
+def test_constraint_checks_pass_after_return() -> None:
+    db = FakeDatabase(summary=CONSTRAINT_SUMMARY)
+    db.apply_attempt(2)
+
+    def restoring(changelog: str, database: TargetDatabase, count: int) -> GatewayResult:
+        db.journal = db.journal[:-count]
+        db.constraints = {(c.kind, c.table, c.name) for c in CONSTRAINT_SUMMARY.dropped_constraints}
+        return GatewayResult("req", 0, "", "")
+
+    db.rollback = restoring  # type: ignore[method-assign]
+
+    output, _ = _rollback(db)
+
+    assert [(c.check, c.passed) for c in output.checks[1:]] == [
+        ("unique_absent", True),
+        ("foreign_key_absent", True),
+        ("foreign_key_present", True),
+        ("unique_present", True),
+    ]
+    assert "fk_invoice_0a1b2c3d" in output.checks[2].detail
+    assert output.verified is True
+
+
+def test_constraint_checks_fail_when_not_returned() -> None:
+    db = FakeDatabase(summary=CONSTRAINT_SUMMARY)
+    db.apply_attempt(2)
+
+    def leaving(changelog: str, database: TargetDatabase, count: int) -> GatewayResult:
+        db.journal = db.journal[:-count]
+        db.constraints = {("foreign_key", "invoice", "fk_invoice_0a1b2c3d")}
+        return GatewayResult("req", 0, "", "")
+
+    db.rollback = leaving  # type: ignore[method-assign]
+
+    output, _ = _rollback(db)
+
+    failed = [c.check for c in output.checks if not c.passed]
+    assert failed == ["foreign_key_absent", "foreign_key_present", "unique_present"]
+    assert output.verified is False

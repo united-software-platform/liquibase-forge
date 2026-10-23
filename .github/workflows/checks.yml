@@ -1,0 +1,65 @@
+# Проверки Liquibase Forge.
+#
+# Повторяют раздел «Проверки» CONTRIBUTING.md — ровно те команды, что автор прогоняет локально
+# до отправки изменений. Совпадение двух перечней сторожит тест tests/release/test_checks_workflow.py:
+# новая проверка добавляется в оба места одной правкой.
+#
+# Запускаются на PR в main, на push в main и из релизного сценария (workflow_call): версия
+# не выпускается с коммита, на котором проверки не пройдены.
+#
+# Тесты, которым нужно окружение, пропускаются фикстурами с причиной: сервер БД интеграционных
+# тестов (FORGE_TEST_DB_HOST), раннер целей make на хосте (AGENT_RUNNER_URL, AGENT_RUNNER_TOKEN)
+# и CLI backlog плагина formular. Эти переменные workflow намеренно не задаёт — гейтом для таких
+# тестов остаётся локальный прогон с раннером перед слиянием.
+name: checks
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_call:
+
+# Проверки только читают репозиторий: ни коммитов, ни тегов, ни релизов.
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Линтер, форматирование, типы, тесты, Makefile
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Получение репозитория
+        uses: actions/checkout@v4
+
+      # Версия uv совпадает с контейнером агента: новый uv может сменить формат uv.lock,
+      # и проверка покраснела бы без правки репозитория.
+      - name: Установка uv и Python
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.7"
+          python-version: "3.12"
+
+      # --frozen: зависимости ставятся строго по uv.lock, как CLI в целевом проекте. Lock-файл,
+      # разошедшийся с pyproject.toml, роняет шаг, а не пересобирается молча.
+      - name: Установка зависимостей
+        run: uv sync --frozen
+
+      - name: Линтер
+        run: uv run ruff check
+
+      - name: Форматирование
+        run: uv run ruff format --check
+
+      - name: Типы
+        run: uv run mypy src
+
+      # Без фильтра маркеров: пропуск по окружению встроен в фикстуры и виден в логе с причиной,
+      # а -m "not integration" спрятал бы тесты молча.
+      - name: Тесты
+        run: uv run pytest
+
+      # Без --max-lines: проверка идёт по норме MAKE-001, храповик MAKE-005 приведён к норме.
+      - name: Объём секций Makefile
+        run: sh tools/make-lint/check.sh

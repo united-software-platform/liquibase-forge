@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from forge.modeling.domain.draft import ColumnDraft, DataModelDraft, TableDraft
+from forge.modeling.domain.draft import ColumnDraft, DataModelDraft, ForeignKeyDraft, TableDraft
 
 EXAMPLE = DataModelDraft(
     (
@@ -16,6 +16,7 @@ EXAMPLE = DataModelDraft(
                 ColumnDraft("created_at", "timestamp_tz", nullable=False),
             ),
             ("id",),
+            unique=(("email",),),
         ),
         TableDraft(
             1,
@@ -27,8 +28,10 @@ EXAMPLE = DataModelDraft(
                 ColumnDraft("is_paid", "boolean"),
                 ColumnDraft("due_date", "date"),
                 ColumnDraft("created_at", "timestamp"),
+                ColumnDraft("customer_id", "uuid"),
             ),
             ("invoice_id", "line_no"),
+            foreign_keys=(ForeignKeyDraft(("customer_id",), "customer", ("id",)),),
         ),
     )
 )

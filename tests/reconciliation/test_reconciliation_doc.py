@@ -36,7 +36,8 @@ def test_example_matches_command_output() -> None:
         ),
         ("id",),
     )
-    found = SchemaComparison().compare(model(CUSTOMER), schema(table))
+    with_unique = CUSTOMER + "    unique:\n      - [email]\n"
+    found = SchemaComparison().compare(model(with_unique), schema(table))
     output = ReconcileOutput(
         result_path="",
         model_path=str(example["model"]),

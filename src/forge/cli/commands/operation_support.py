@@ -40,6 +40,7 @@ def operation_payload(view: OperationView) -> dict[str, Any]:
         "stamp": view.stamp,
         "intent": view.intent,
         "mode": view.mode,
+        "allow_drop": view.allow_drop,
         "status": view.status,
         "stop_reason": view.stop_reason,
         "used_attempts": view.used_attempts,

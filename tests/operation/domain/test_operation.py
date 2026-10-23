@@ -8,6 +8,7 @@ from forge.operation.domain.factory import OperationFactory, OperationRestoreErr
 from forge.operation.domain.operation import (
     Operation,
     OperationClosedError,
+    OperationDropConsentError,
     OperationNotClosableError,
     OperationNotStoppedError,
     OperationStatus,
@@ -157,3 +158,47 @@ def test_restore_rejects_unknown_values(field: str, value: str) -> None:
 def test_restore_rejects_unknown_verdict() -> None:
     with pytest.raises(OperationRestoreError):
         _operation(verdicts=("maybe", None, None))
+
+
+def _with_mode(mode: str, status: str) -> Operation:
+    return OperationFactory().restore(
+        path="backlog/forge-model/20261017-153000/tasks.md",
+        stamp="20261017-153000",
+        intent="Таблица клиентов",
+        mode=mode,
+        status=status,
+        stop_reason="drop_not_allowed",
+        attempts=[(None, None, f"attempt-{n}") for n in (1, 2, 3)],
+    )
+
+
+def test_consent_is_granted_to_stopped_auto_operation_once() -> None:
+    operation = _with_mode("auto", "stopped")
+
+    operation.grant_drop()
+    operation.grant_drop()
+
+    assert operation.allow_drop is True
+    assert operation.status is OperationStatus.STOPPED
+
+
+def test_consent_is_not_granted_to_running_operation() -> None:
+    operation = _with_mode("auto", "running")
+
+    with pytest.raises(OperationNotStoppedError):
+        operation.grant_drop()
+    assert operation.allow_drop is False
+
+
+def test_consent_is_not_granted_in_interactive_mode() -> None:
+    operation = _with_mode("interactive", "stopped")
+
+    with pytest.raises(OperationDropConsentError):
+        operation.grant_drop()
+    assert operation.allow_drop is False
+
+
+@pytest.mark.parametrize("status", ["success", "failure"])
+def test_consent_is_not_granted_to_closed_operation(status: str) -> None:
+    with pytest.raises(OperationClosedError):
+        _with_mode("auto", status).grant_drop()

@@ -25,8 +25,10 @@ def _generate(
     attempt: str,
     accepted: str | None = None,
     subject: str = "20261017-153000",
+    mode: str = "auto",
+    allow_drop: bool | None = None,
 ) -> tuple[int, dict[str, Any], Path]:
-    operation = write_operation(tmp_path, subject=subject)
+    operation = write_operation(tmp_path, subject=subject, mode=mode, allow_drop=allow_drop)
     model = _model(tmp_path / "model.yaml", attempt)
     accepted_path = tmp_path / "accepted.yaml"
     if accepted is not None:
@@ -68,7 +70,13 @@ def test_new_column(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
 
     assert code == 0
     assert payload["changesets"] == [
-        {"id": "20261017-153000-01", "kind": "add_column", "table": "customer", "column": "phone"}
+        {
+            "id": "20261017-153000-01",
+            "kind": "add_column",
+            "table": "customer",
+            "column": "phone",
+            "constraint": None,
+        }
     ]
 
 
@@ -80,22 +88,87 @@ def test_same_models(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None
     assert yaml.safe_load(out.read_text(encoding="utf-8")) == {"databaseChangeLog": []}
 
 
-def test_removed_column_is_refused_and_old_changelog_removed(
+WITHOUT_EMAIL = CUSTOMER.replace(
+    "      - {name: email, type: string, length: 255, nullable: false}\n", ""
+)
+
+
+def test_removed_column_is_drop_changeset_with_consent(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    code, payload, out = _generate(
+        tmp_path, capsys, WITHOUT_EMAIL, accepted=CUSTOMER, allow_drop=True
+    )
+
+    assert code == 0
+    assert payload["non_additive"] == []
+    assert payload["changesets"] == [
+        {
+            "id": "20261017-153000-01",
+            "kind": "drop_column",
+            "table": "customer",
+            "column": "email",
+            "constraint": None,
+        }
+    ]
+    assert out.exists()
+
+
+def test_drop_without_consent_in_auto_is_code_2(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     out = tmp_path / "attempt-1" / "changelog.yaml"
     out.parent.mkdir()
     out.write_text("устаревший changelog", encoding="utf-8")
-    attempt = CUSTOMER.replace(
-        "      - {name: email, type: string, length: 255, nullable: false}\n", ""
+
+    code, payload, _ = _generate(
+        tmp_path, capsys, WITHOUT_EMAIL, accepted=CUSTOMER, allow_drop=False
     )
+
+    assert code == 2
+    assert payload["error"]["kind"] == "drop_not_allowed"
+    assert payload["error"]["objects"] == ["customer.email"]
+    assert "/forge --mode auto --allow-drop" in payload["error"]["message"]
+    assert not out.exists()
+
+
+def test_legacy_backlog_without_field_refuses_drop(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    code, payload, _ = _generate(tmp_path, capsys, CUSTOMER, accepted=CUSTOMER + INVOICE)
+
+    assert code == 2
+    assert (payload["error"]["kind"], payload["error"]["objects"]) == (
+        "drop_not_allowed",
+        ["invoice"],
+    )
+
+
+def test_drop_in_interactive_needs_no_consent(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    code, payload, _ = _generate(
+        tmp_path, capsys, CUSTOMER, accepted=CUSTOMER + INVOICE, mode="interactive"
+    )
+
+    assert code == 0
+    assert [(c["kind"], c["table"]) for c in payload["changesets"]] == [("drop_table", "invoice")]
+
+
+def test_refused_generation_removes_old_changelog(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    out = tmp_path / "attempt-1" / "changelog.yaml"
+    out.parent.mkdir()
+    out.write_text("устаревший changelog", encoding="utf-8")
+    attempt = CUSTOMER.replace("type: string, length: 255", "type: text")
 
     code, payload, _ = _generate(tmp_path, capsys, attempt, accepted=CUSTOMER)
 
     assert code == 1
     assert payload["changelog"] is None
     assert [(c["code"], c["table"], c["column"]) for c in payload["non_additive"]] == [
-        ("column_removed", "customer", "email")
+        ("column_type_changed", "customer", "email")
     ]
     assert not out.exists()
 
@@ -236,3 +309,44 @@ def test_invalid_accepted_root(
     assert code == 2
     assert "FORGE_ACCEPTED_DIR" in json.dumps(payload, ensure_ascii=False)
     assert not out.exists()
+
+
+LINKED = INVOICE.replace(
+    "    primary_key: [number]",
+    "      - {name: customer_id, type: uuid}\n    primary_key: [number]\n"
+    "    foreign_keys:\n"
+    "      - {columns: [customer_id], references: {table: customer, columns: [id]}}",
+)
+
+
+def test_constraint_changesets(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    code, payload, out = _generate(tmp_path, capsys, LINKED + CUSTOMER)
+
+    assert code == 0
+    kinds = [(c["kind"], c["table"], c["column"]) for c in payload["changesets"]]
+    assert kinds == [
+        ("create_table", "invoice", None),
+        ("create_table", "customer", None),
+        ("add_foreign_key", "invoice", None),
+    ]
+    constraint = payload["changesets"][2]["constraint"]
+    assert constraint.startswith("fk_invoice_") and len(constraint) == len("fk_invoice_") + 8
+    (change,) = yaml.safe_load(out.read_text(encoding="utf-8"))["databaseChangeLog"][2][
+        "changeSet"
+    ]["changes"]
+    assert change["addForeignKeyConstraint"]["constraintName"] == constraint
+
+
+def test_foreign_key_drop_in_auto_without_consent(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    unlinked = LINKED.split("    foreign_keys:")[0]
+
+    code, payload, out = _generate(
+        tmp_path, capsys, unlinked + CUSTOMER, accepted=LINKED + CUSTOMER, allow_drop=False
+    )
+
+    assert code == 0
+    assert [c["kind"] for c in payload["changesets"]] == ["drop_foreign_key"]
+    (entry,) = yaml.safe_load(out.read_text(encoding="utf-8"))["databaseChangeLog"]
+    assert "addForeignKeyConstraint" in entry["changeSet"]["rollback"][0]

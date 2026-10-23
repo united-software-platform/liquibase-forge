@@ -9,6 +9,7 @@ from forge.migration.application.changelog_storage import (
     ChangelogReaderInterface,
     ChangelogSummary,
     ChangelogUnreadableError,
+    ConstraintRef,
 )
 from forge.migration.application.database import (
     DatabaseRecreatorInterface,
@@ -54,8 +55,8 @@ class RollbackAttemptUseCase:
     Откат Liquibase выполняется, только если записи попытки — хвост журнала и changelog
     попытки на месте. Иначе, как и при ошибке Liquibase, целевая БД пересоздаётся и получает
     принятый changelog `accepted_master` — `master.yaml` корня принятого состояния. Затем
-    проверяется возврат, итог пишется в `rollback.json` каталога попытки. Ошибки окружения —
-    исключения контрактов.
+    проверяется возврат: добавленного changelog попытки в схеме нет, удалённое — снова есть.
+    Итог пишется в `rollback.json` каталога попытки. Ошибки окружения — исключения контрактов.
     """
 
     def __init__(self, dependencies: RollbackDependencies, accepted_master: str) -> None:
@@ -177,7 +178,33 @@ class RollbackAttemptUseCase:
         for table, column in summary.columns:
             present = self._deps.schema.column_exists(target, table, column)
             checks.append(CheckView("column_absent", not present, f"колонка {table}.{column}"))
+        for constraint in summary.constraints:
+            present = self._constraint_exists(target, constraint)
+            checks.append(
+                CheckView(f"{constraint.kind}_absent", not present, _constraint_detail(constraint))
+            )
+        for table in summary.dropped_tables:
+            present = self._deps.schema.table_exists(target, table)
+            checks.append(CheckView("table_present", present, f"таблица {table}"))
+        for table, column in summary.dropped_columns:
+            present = self._deps.schema.column_exists(target, table, column)
+            checks.append(CheckView("column_present", present, f"колонка {table}.{column}"))
+        for constraint in summary.dropped_constraints:
+            present = self._constraint_exists(target, constraint)
+            checks.append(
+                CheckView(f"{constraint.kind}_present", present, _constraint_detail(constraint))
+            )
         return checks
+
+    def _constraint_exists(self, target: TargetDatabase, constraint: ConstraintRef) -> bool:
+        return self._deps.schema.constraint_exists(
+            target, constraint.table, constraint.name, constraint.kind
+        )
+
+
+def _constraint_detail(constraint: ConstraintRef) -> str:
+    kind = "внешний ключ" if constraint.kind == "foreign_key" else "набор уникальности"
+    return f"{kind} {constraint.table}.{constraint.name}"
 
 
 def _fallback_reason(

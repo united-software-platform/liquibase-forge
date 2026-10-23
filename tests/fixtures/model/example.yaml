@@ -14,6 +14,8 @@ tables:
         type: timestamp_tz
         nullable: false
     primary_key: [id]
+    unique:
+      - [email]
   - name: invoice_line
     columns:
       - name: invoice_id
@@ -31,4 +33,9 @@ tables:
         type: date
       - name: created_at
         type: timestamp
+      - name: customer_id
+        type: uuid
     primary_key: [invoice_id, line_no]
+    foreign_keys:
+      - columns: [customer_id]
+        references: {table: customer, columns: [id]}

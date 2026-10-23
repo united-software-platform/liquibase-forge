@@ -36,6 +36,47 @@ def test_relative_path_gives_relative_attempt_directory(
     assert record.attempt_directory(1) == "backlog/forge-model/20261017-153000/attempt-1"
 
 
+def test_mode_and_consent_are_read(tmp_path: Path) -> None:
+    record = FrontmatterOperationRecordReader().read(
+        str(write_operation(tmp_path, mode="auto", allow_drop=True))
+    )
+
+    assert (record.mode, record.allow_drop) == ("auto", True)
+
+
+def test_backlog_without_consent_field_gives_false(tmp_path: Path) -> None:
+    record = FrontmatterOperationRecordReader().read(str(write_operation(tmp_path)))
+
+    assert (record.mode, record.allow_drop) == ("auto", False)
+
+
+def test_interactive_backlog(tmp_path: Path) -> None:
+    record = FrontmatterOperationRecordReader().read(
+        str(write_operation(tmp_path, mode="interactive"))
+    )
+
+    assert (record.mode, record.allow_drop) == ("interactive", False)
+
+
+@pytest.mark.parametrize("value", ['"yes"', "1"])
+def test_consent_must_be_boolean(tmp_path: Path, value: str) -> None:
+    path = write_operation(tmp_path)
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "mode: auto\n", f"mode: auto\nallow_drop: {value}\n"
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(OperationRecordUnavailableError):
+        FrontmatterOperationRecordReader().read(str(path))
+
+
+def test_unknown_mode(tmp_path: Path) -> None:
+    with pytest.raises(OperationRecordUnavailableError):
+        FrontmatterOperationRecordReader().read(str(write_operation(tmp_path, mode="manual")))
+
+
 def test_missing_backlog(tmp_path: Path) -> None:
     with pytest.raises(OperationRecordUnavailableError):
         FrontmatterOperationRecordReader().read(str(tmp_path / "tasks.md"))

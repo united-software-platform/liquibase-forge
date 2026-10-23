@@ -42,6 +42,30 @@ def test_generated_backlog_is_read(tmp_path: Path) -> None:
     assert record.directories[2].endswith(f"{STAMP}/attempt-2")
 
 
+@pytest.mark.parametrize("consent", [True, False])
+def test_consent_is_read_from_generated_backlog(tmp_path: Path, consent: bool) -> None:
+    path = generate(tmp_path, allow_drop=consent)
+
+    assert _repository(tmp_path).get(str(path)).allow_drop is consent
+
+
+def test_legacy_backlog_without_consent_field_reads_false(tmp_path: Path) -> None:
+    assert _repository(tmp_path).get(str(legacy(tmp_path))).allow_drop is False
+
+
+def test_consent_must_be_boolean(tmp_path: Path) -> None:
+    path = legacy(tmp_path)
+    path.write_text(
+        path.read_text(encoding="utf-8").replace(
+            "status: running\n", 'status: running\nallow_drop: "yes"\n'
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(OperationUnavailableError):
+        _repository(tmp_path).get(str(path))
+
+
 def test_legacy_backlog_without_trail_and_stop_reason(tmp_path: Path) -> None:
     path = legacy(tmp_path)
     set_values(path, verdict__attempt_1="failure")
@@ -134,3 +158,64 @@ def test_resume_writes_null_reason(tmp_path: Path) -> None:
 
     record = repository.get(str(path))
     assert (record.status, record.stop_reason) == ("running", None)
+
+
+def _consent(tmp_path: Path, path: Path) -> None:
+    operation = restore(_repository(tmp_path).get(str(path)), OperationFactory())
+    FrontmatterOperationWriteRepository().save_drop_consent(operation)
+
+
+def _changed_lines(before: str, after: str) -> list[str]:
+    return [
+        line
+        for line in difflib.unified_diff(before.splitlines(), after.splitlines(), lineterm="", n=0)
+        if line.startswith(("+", "-")) and not line.startswith(("+++", "---"))
+    ]
+
+
+def test_consent_replaces_only_its_line(tmp_path: Path) -> None:
+    path = generate(tmp_path)
+    before = path.read_text(encoding="utf-8")
+
+    _consent(tmp_path, path)
+
+    assert _changed_lines(before, path.read_text(encoding="utf-8")) == [
+        "-allow_drop: false",
+        "+allow_drop: true",
+    ]
+
+
+def test_consent_is_inserted_after_mode_in_legacy_backlog(tmp_path: Path) -> None:
+    path = legacy(tmp_path)
+    before = path.read_text(encoding="utf-8")
+
+    _consent(tmp_path, path)
+
+    after = path.read_text(encoding="utf-8")
+    assert _changed_lines(before, after) == ["+allow_drop: true"]
+    assert "mode: interactive\nallow_drop: true\n" in after
+
+
+def test_consent_reaches_started_attempt_backlogs(tmp_path: Path) -> None:
+    path = generate(tmp_path)
+    attempt = tmp_path / "attempt-backlog.md"
+    attempt.write_text(
+        "---\nmode: auto\nallow_drop: false\nverdict: null\n---\n\n# Попытка 1\n",
+        encoding="utf-8",
+    )
+    set_values(path, backlog__attempt_1=str(attempt))
+
+    _consent(tmp_path, path)
+
+    assert attempt.read_text(encoding="utf-8") == (
+        "---\nmode: auto\nallow_drop: true\nverdict: null\n---\n\n# Попытка 1\n"
+    )
+
+
+def test_repeated_consent_changes_nothing(tmp_path: Path) -> None:
+    path = generate(tmp_path, allow_drop=True)
+    before = path.read_bytes()
+
+    _consent(tmp_path, path)
+
+    assert path.read_bytes() == before

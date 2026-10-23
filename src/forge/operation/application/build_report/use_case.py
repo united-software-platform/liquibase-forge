@@ -77,6 +77,7 @@ class BuildReportUseCase:
             model, changelog = attempts[-1].model, attempts[-1].changelog
         else:
             model = changelog = None
+        destructive = self._results.destructive(changelog) if changelog is not None else ()
         backlogs = (operation.path, *(a.backlog for a in attempts if a.backlog is not None))
         commit_files: tuple[str, ...] | None = None
         if operation.status in (OperationStatus.SUCCESS, OperationStatus.FAILURE):
@@ -91,6 +92,7 @@ class BuildReportUseCase:
             backlogs=backlogs,
             accepted=accepted,
             commit_files=commit_files,
+            destructive=destructive,
         )
 
 

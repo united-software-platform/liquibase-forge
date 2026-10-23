@@ -23,12 +23,32 @@ class ActualColumn:
 
 
 @dataclass(frozen=True)
+class ActualForeignKey:
+    """Внешний ключ в БД без имени: колонки, целевая таблица и колонки цели в парном порядке."""
+
+    columns: tuple[str, ...]
+    target: str
+    target_columns: tuple[str, ...]
+
+    def pairs(self) -> frozenset[tuple[str, str]]:
+        """Пары «колонка FK → колонка цели» без порядка."""
+        return frozenset(zip(self.columns, self.target_columns, strict=True))
+
+    def __str__(self) -> str:
+        """Запись для расхождения: `[customer_id] → customer[id]`."""
+        return f"[{', '.join(self.columns)}] → {self.target}[{', '.join(self.target_columns)}]"
+
+
+@dataclass(frozen=True)
 class ActualTable:
-    """Таблица в БД: колонки в порядке каталога и первичный ключ, если он есть."""
+    """Таблица в БД: колонки в порядке каталога, первичный ключ, если он есть,
+    ограничения уникальности и внешние ключи без имён."""
 
     name: str
     columns: tuple[ActualColumn, ...]
     primary_key: tuple[str, ...] | None
+    unique: tuple[tuple[str, ...], ...] = ()
+    foreign_keys: tuple[ActualForeignKey, ...] = ()
 
     def column(self, name: str) -> ActualColumn | None:
         return next((column for column in self.columns if column.name == name), None)

@@ -26,6 +26,7 @@ EXPECTED_TYPES = {
     ("invoice_line", "is_paid"): ("boolean", False),
     ("invoice_line", "due_date"): ("date", False),
     ("invoice_line", "created_at"): ("timestamp without time zone", False),
+    ("invoice_line", "customer_id"): ("uuid", False),
 }
 
 
@@ -79,6 +80,8 @@ def test_apply_creates_columns_with_mapped_types(
     assert journal == [
         ("20261017-153000-01", "db/changelog/20261017-153000.yaml"),
         ("20261017-153000-02", "db/changelog/20261017-153000.yaml"),
+        ("20261017-153000-03", "db/changelog/20261017-153000.yaml"),
+        ("20261017-153000-04", "db/changelog/20261017-153000.yaml"),
     ]
 
 

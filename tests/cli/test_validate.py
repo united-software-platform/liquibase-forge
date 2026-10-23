@@ -221,3 +221,70 @@ def test_model_argument_is_required(capsys: pytest.CaptureFixture[str]) -> None:
     assert isinstance(error, dict)
     assert error["kind"] == "usage"
     assert "--model" in error["message"]
+
+
+CUSTOMER = _table(ID + "      - {name: email, type: string, length: 255}\n")
+
+
+def _invoice(foreign_key: str, extra: str = "") -> str:
+    columns = ID + "      - {name: customer_id, type: bigint}\n"
+    return _table(columns, name="invoice") + extra + f"    foreign_keys:\n      - {foreign_key}\n"
+
+
+def test_model_with_relations_is_valid(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    text = _model(
+        _invoice("{columns: [customer_id], references: {table: customer, columns: [id]}}"),
+        CUSTOMER + "    unique: [[email]]\n",
+    )
+
+    code, payload = _validate(text, tmp_path, capsys)
+
+    assert (code, payload["violations"]) == (0, [])
+
+
+@pytest.mark.parametrize(
+    ("foreign_key", "expected"),
+    [
+        (
+            "{columns: [customer_id], references: {table: client, columns: [id]}}",
+            (("tables[1].foreign_keys[0].references.table", "foreign_key_unknown_table"),),
+        ),
+        (
+            "{columns: [customer_id], references: {table: customer, columns: [email]}}",
+            (
+                ("tables[1].foreign_keys[0].references.columns", "foreign_key_target_not_key"),
+                ("tables[1].foreign_keys[0].columns[0]", "foreign_key_type_mismatch"),
+            ),
+        ),
+        (
+            "{columns: [customer_id], references: {table: customer, columns: [id]}, "
+            "on_delete: cascade}",
+            (("tables[1].foreign_keys[0].on_delete", "unknown_field"),),
+        ),
+    ],
+)
+def test_foreign_key_violation(
+    foreign_key: str,
+    expected: tuple[tuple[str, str], ...],
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    code, payload = _validate(_model(CUSTOMER, _invoice(foreign_key)), tmp_path, capsys)
+
+    assert (code, _paths(payload)) == (1, list(expected))
+
+
+def test_relation_violations_are_stable(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    text = _model(
+        CUSTOMER + "    unique: [[email, email], [id]]\n",
+        _invoice("{columns: [customer_id], references: {table: customer, columns: [email]}}"),
+    )
+
+    first = _validate(text, tmp_path, capsys)
+    second = _validate(text, tmp_path, capsys)
+
+    assert first == second
+    assert _paths(first[1]) == [
+        ("tables[0].unique[0][1]", "unique_duplicate_column"),
+        ("tables[0].unique[1]", "unique_equals_primary_key"),
+    ]

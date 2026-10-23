@@ -70,14 +70,15 @@ def test_rollback_returns_schema(
     capsys: pytest.CaptureFixture[str], trail: Path, target: TestDatabase
 ) -> None:
     _apply_attempt(capsys, trail)
-    assert _state(target)[1] == [f"{STAMP}-01", f"{STAMP}-02"]
+    # Таблицы customer и invoice_line, набор уникальности customer и FK invoice_line
+    assert _state(target)[1] == [f"{STAMP}-0{n}" for n in range(1, 5)]
 
     code, payload = _rollback(capsys, trail)
 
     assert code == 0, payload
     assert (payload["action"], payload["rolled_back"], payload["verified"]) == (
         "liquibase_rollback",
-        2,
+        4,
         True,
     )
     tables, journal = _state(target)
@@ -90,15 +91,20 @@ def test_partial_apply_rolls_back_applied_changesets(
     capsys: pytest.CaptureFixture[str], trail: Path, target: TestDatabase
 ) -> None:
     _apply_attempt(capsys, trail)
-    # Состояние частичного наката: второй changeset не дошёл до журнала и схемы
+    # Состояние частичного наката: последний changeset — FK — не дошёл до журнала и схемы
     with psycopg.connect(target.conninfo) as connection:
-        connection.execute("DELETE FROM databasechangelog WHERE id = %s", (f"{STAMP}-02",))
-        connection.execute("DROP TABLE invoice_line")
+        connection.execute("DELETE FROM databasechangelog WHERE id = %s", (f"{STAMP}-04",))
+        row = connection.execute(
+            "SELECT conname FROM pg_constraint "
+            "WHERE contype = 'f' AND conrelid = 'invoice_line'::regclass"
+        ).fetchone()
+        assert row is not None
+        connection.execute(f'ALTER TABLE invoice_line DROP CONSTRAINT "{row[0]}"')
 
     code, payload = _rollback(capsys, trail)
 
     assert code == 0, payload
-    assert (payload["action"], payload["rolled_back"]) == ("liquibase_rollback", 1)
+    assert (payload["action"], payload["rolled_back"]) == ("liquibase_rollback", 3)
     assert _state(target)[1] == []
 
 

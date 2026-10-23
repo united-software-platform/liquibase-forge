@@ -9,9 +9,15 @@ def write_operation(
     directory: Path,
     subject: str = "20261017-153000",
     verdicts: tuple[str, str, str] = ("null", "null", "null"),
+    mode: str = "auto",
+    allow_drop: bool | None = None,
 ) -> Path:
-    """Записать беклог операции `<directory>/tasks.md` и вернуть его путь."""
+    """Записать беклог операции `<directory>/tasks.md` и вернуть его путь.
+
+    `allow_drop` не задан (`None`) — поля нет, как в беклоге прежнего шаблона.
+    """
     path = directory / "tasks.md"
+    consent = "" if allow_drop is None else f"allow_drop: {'true' if allow_drop else 'false'}\n"
     path.write_text(
         "<!-- template_version: 1.0.0 -->\n"
         "---\n"
@@ -21,7 +27,8 @@ def write_operation(
         f'subject: "{subject}"\n'
         'runner: ".claude/commands/backlog/backlog-run.md"\n'
         "intent: >-\n  Таблица клиентов\n"
-        "mode: auto\n"
+        f"mode: {mode}\n"
+        f"{consent}"
         "gate:\n  close: null\n"
         "status: running\n"
         "verdict:\n"

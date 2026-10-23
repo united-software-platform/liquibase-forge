@@ -9,8 +9,10 @@
 ## Навигация
 
 - [Changelog](#changelog)
+- [Удаления](#удаления)
+- [Связи и уникальность](#связи-и-уникальность)
 - [Идентичность changeset](#идентичность-changeset)
-- [Добавляющие изменения](#добавляющие-изменения)
+- [Неподдерживаемые изменения](#неподдерживаемые-изменения)
 - [Команда forge generate](#команда-forge-generate)
 - [Накат](#накат)
 - [Откат](#откат)
@@ -23,8 +25,10 @@
 
 ## Changelog
 
-Changelog — добавляющая разница между принятой моделью `db/model.yaml` и моделью попытки.
-Если принятой модели нет, она считается пустой, и changelog создаёт все таблицы модели.
+Changelog — разница между принятой моделью `db/model.yaml` и моделью попытки: новые и удалённые
+таблицы, колонки, наборы уникальности и внешние ключи. Если принятой модели нет, она считается
+пустой, и changelog создаёт все таблицы модели. Удаления описаны в разделе [Удаления](#удаления),
+ограничения — в разделе [Связи и уникальность](#связи-и-уникальность).
 
 Принятая модель:
 
@@ -65,19 +69,6 @@ databaseChangeLog:
     author: forge
     logicalFilePath: db/changelog/20261017-153000.yaml
     changes:
-    - addColumn:
-        tableName: customer
-        columns:
-        - column:
-            name: email
-            type: VARCHAR(255)
-            constraints:
-              nullable: false
-- changeSet:
-    id: 20261017-153000-02
-    author: forge
-    logicalFilePath: db/changelog/20261017-153000.yaml
-    changes:
     - createTable:
         tableName: invoice_line
         columns:
@@ -98,14 +89,31 @@ databaseChangeLog:
         tableName: invoice_line
         columnNames: invoice_id, line_no
         constraintName: pk_invoice_line
+- changeSet:
+    id: 20261017-153000-02
+    author: forge
+    logicalFilePath: db/changelog/20261017-153000.yaml
+    changes:
+    - addColumn:
+        tableName: customer
+        columns:
+        - column:
+            name: email
+            type: VARCHAR(255)
+            constraints:
+              nullable: false
 ```
 
 Тест проверяет, что `forge generate` строит из этих моделей ровно этот changelog.
 
 Правила построения:
 
-- **Порядок.** Changeset идут в порядке таблиц модели попытки, внутри таблицы — в порядке колонок.
-- **Таблица.** Новая таблица — один changeset из `createTable` и `addPrimaryKey`. Первичный ключ
+- **Порядок.** Changeset идут группами: удаление внешних ключей, удаление наборов уникальности,
+  удаление таблиц, удаление колонок, создание таблиц, добавление колонок, добавление наборов
+  уникальности, добавление внешних ключей. Удаления идут в порядке таблиц и объектов принятой
+  модели, добавления — модели попытки. Номера `id` идут подряд через весь changelog.
+- **Таблица.** Новая таблица — один changeset из `createTable` и `addPrimaryKey`; её наборы
+  уникальности и внешние ключи — отдельные changeset. Первичный ключ
   (Primary Key, PK) создаётся отдельно, чтобы сохранить порядок колонок `primary_key` модели;
   признак `primaryKey` в колонках построил бы ключ в порядке колонок таблицы.
 - **Колонка.** Новая колонка существующей таблицы — один changeset `addColumn`.
@@ -116,8 +124,283 @@ databaseChangeLog:
 - **Совпадающие модели.** Changelog без changeset: `databaseChangeLog: []`.
 - **Повторяемость.** Повторная генерация с теми же аргументами даёт побайтово тот же файл.
 
-Откат changeset Liquibase выводит сам: `dropPrimaryKey` и `dropTable` для таблицы, `dropColumn`
-для колонки.
+Откат changeset создания таблицы, добавления колонки и ограничения Liquibase выводит сам. Откат
+changeset удаления задан явно — см. [Удаления](#удаления).
+
+---
+
+## Удаления
+
+Удалённая таблица и удалённая колонка существующей таблицы дают отдельные changeset `dropTable`
+и `dropColumn`. Ниже модель, из которой удалены таблица `invoice_line` и колонка `customer.email`,
+а таблица `payment` добавлена.
+
+Принятая модель:
+
+```yaml
+version: 1
+tables:
+  - name: customer
+    columns:
+      - {name: id, type: uuid}
+      - {name: email, type: string, length: 255, nullable: false}
+    primary_key: [id]
+  - name: invoice_line
+    columns:
+      - {name: line_no, type: integer}
+      - {name: invoice_id, type: bigint}
+      - {name: amount, type: decimal, precision: 12, scale: 2}
+    primary_key: [invoice_id, line_no]
+```
+
+Модель попытки:
+
+```yaml
+version: 1
+tables:
+  - name: customer
+    columns:
+      - {name: id, type: uuid}
+    primary_key: [id]
+  - name: payment
+    columns:
+      - {name: id, type: uuid}
+      - {name: amount, type: decimal, precision: 12, scale: 2, nullable: false}
+    primary_key: [id]
+```
+
+Changelog операции со штампом `20261017-153000`:
+
+```yaml
+# Changelog операции 20261017-153000: построен forge generate, вручную не правится
+databaseChangeLog:
+- changeSet:
+    id: 20261017-153000-01
+    author: forge
+    logicalFilePath: db/changelog/20261017-153000.yaml
+    changes:
+    - dropTable:
+        tableName: invoice_line
+    rollback:
+    - createTable:
+        tableName: invoice_line
+        columns:
+        - column:
+            name: line_no
+            type: INTEGER
+            constraints:
+              nullable: false
+        - column:
+            name: invoice_id
+            type: BIGINT
+            constraints:
+              nullable: false
+        - column:
+            name: amount
+            type: NUMERIC(12, 2)
+    - addPrimaryKey:
+        tableName: invoice_line
+        columnNames: invoice_id, line_no
+        constraintName: pk_invoice_line
+- changeSet:
+    id: 20261017-153000-02
+    author: forge
+    logicalFilePath: db/changelog/20261017-153000.yaml
+    changes:
+    - dropColumn:
+        tableName: customer
+        columnName: email
+    rollback:
+    - addColumn:
+        tableName: customer
+        columns:
+        - column:
+            name: email
+            type: VARCHAR(255)
+            constraints:
+              nullable: false
+- changeSet:
+    id: 20261017-153000-03
+    author: forge
+    logicalFilePath: db/changelog/20261017-153000.yaml
+    changes:
+    - createTable:
+        tableName: payment
+        columns:
+        - column:
+            name: id
+            type: UUID
+            constraints:
+              nullable: false
+        - column:
+            name: amount
+            type: NUMERIC(12, 2)
+            constraints:
+              nullable: false
+    - addPrimaryKey:
+        tableName: payment
+        columnNames: id
+        constraintName: pk_payment
+```
+
+Тест проверяет, что `forge generate` строит из этих моделей ровно этот changelog.
+
+Правила удалений:
+
+- **Откат.** Блок `rollback` changeset восстанавливает структуру объекта по принятой модели: таблицу
+  с колонками, типами, NOT NULL, ключом `pk_<таблица>` и наборами уникальности, колонку — с типом
+  и NOT NULL. Данные удалённого объекта откат не восстанавливает.
+- **Колонка ключа.** Удаление колонки первичного ключа не даёт `dropColumn` и отклоняется как смена
+  ключа — см. [Неподдерживаемые изменения](#неподдерживаемые-изменения).
+- **Согласие в `auto`.** Changelog с удалениями строится в режиме `auto` только при `allow_drop: true`
+  в беклоге операции, иначе `forge generate` отвечает кодом `2` с видом `drop_not_allowed` — см.
+  [operation.md](./operation.md#согласие-на-удаления).
+
+> **Внимание:** удаление стирает данные тестовой БД. Принятый changelog с удалением остаётся
+> в `master.yaml` навсегда, и при переносе на рабочую БД он удалит данные. Ограничение «только
+> тестовая БД» сохраняется.
+
+---
+
+## Связи и уникальность
+
+Набор уникальности и внешний ключ (Foreign Key, FK) — отдельные changeset `addUniqueConstraint`
+и `addForeignKeyConstraint`, а их удаление — `dropUniqueConstraint` и `dropForeignKeyConstraint`.
+Ниже FK таблицы `invoice` переводится с `customer.id` на новый набор уникальности `customer.email`,
+а колонка `invoice.customer_id` заменяется на `customer_email`. Таблица `invoice` стоит в модели
+попытки раньше `customer`, на которую ссылается.
+
+Принятая модель:
+
+```yaml
+version: 1
+tables:
+  - name: customer
+    columns:
+      - {name: id, type: uuid}
+      - {name: email, type: string, length: 255, nullable: false}
+    primary_key: [id]
+  - name: invoice
+    columns:
+      - {name: id, type: bigint}
+      - {name: customer_id, type: uuid}
+    primary_key: [id]
+    foreign_keys:
+      - {columns: [customer_id], references: {table: customer, columns: [id]}}
+```
+
+Модель попытки:
+
+```yaml
+version: 1
+tables:
+  - name: invoice
+    columns:
+      - {name: id, type: bigint}
+      - {name: customer_email, type: string, length: 255}
+    primary_key: [id]
+    foreign_keys:
+      - {columns: [customer_email], references: {table: customer, columns: [email]}}
+  - name: customer
+    columns:
+      - {name: id, type: uuid}
+      - {name: email, type: string, length: 255, nullable: false}
+    primary_key: [id]
+    unique:
+      - [email]
+```
+
+Changelog операции со штампом `20261017-153000`:
+
+```yaml
+# Changelog операции 20261017-153000: построен forge generate, вручную не правится
+databaseChangeLog:
+- changeSet:
+    id: 20261017-153000-01
+    author: forge
+    logicalFilePath: db/changelog/20261017-153000.yaml
+    changes:
+    - dropForeignKeyConstraint:
+        baseTableName: invoice
+        constraintName: fk_invoice_2bb3c7e8
+    rollback:
+    - addForeignKeyConstraint:
+        baseTableName: invoice
+        baseColumnNames: customer_id
+        referencedTableName: customer
+        referencedColumnNames: id
+        constraintName: fk_invoice_2bb3c7e8
+- changeSet:
+    id: 20261017-153000-02
+    author: forge
+    logicalFilePath: db/changelog/20261017-153000.yaml
+    changes:
+    - dropColumn:
+        tableName: invoice
+        columnName: customer_id
+    rollback:
+    - addColumn:
+        tableName: invoice
+        columns:
+        - column:
+            name: customer_id
+            type: UUID
+- changeSet:
+    id: 20261017-153000-03
+    author: forge
+    logicalFilePath: db/changelog/20261017-153000.yaml
+    changes:
+    - addColumn:
+        tableName: invoice
+        columns:
+        - column:
+            name: customer_email
+            type: VARCHAR(255)
+- changeSet:
+    id: 20261017-153000-04
+    author: forge
+    logicalFilePath: db/changelog/20261017-153000.yaml
+    changes:
+    - addUniqueConstraint:
+        tableName: customer
+        columnNames: email
+        constraintName: uq_customer_5052fedd
+- changeSet:
+    id: 20261017-153000-05
+    author: forge
+    logicalFilePath: db/changelog/20261017-153000.yaml
+    changes:
+    - addForeignKeyConstraint:
+        baseTableName: invoice
+        baseColumnNames: customer_email
+        referencedTableName: customer
+        referencedColumnNames: email
+        constraintName: fk_invoice_846d1282
+```
+
+Тест проверяет, что `forge generate` строит из этих моделей ровно этот changelog.
+
+Правила ограничений:
+
+- **Тождество.** Ограничения сравниваются по содержимому: набор — по составу колонок, FK —
+  по целевой таблице и парам «колонка FK → колонка цели». Перестановка наборов, FK, колонок
+  набора или пар FK changeset не даёт. Изменённое ограничение — удаление прежнего и добавление
+  нового.
+- **Имена.** FK называется `fk_<таблица>_<hash8>`, набор — `uq_<таблица>_<hash8>`: `hash8` — первые
+  восемь знаков SHA-256 от таблицы и содержимого ограничения с отсортированными колонками или
+  парами. Таблица в имени обрезается до 51 символа, и имя укладывается в 63 символа PostgreSQL.
+  Одинаковое ограничение получает одинаковое имя в любой модели, поэтому имя не хранится.
+- **Порядок.** Удаление FK идёт первым, а добавление — последним: на момент добавления FK уже есть
+  обе таблицы, колонки и набор уникальности цели. Удаление набора идёт раньше удаления его колонки.
+- **Удаление таблицы со связями.** FK удаляемой таблицы и FK других таблиц на неё удаляются
+  отдельными changeset до `dropTable`. Наборы уникальности удаляемой таблицы отдельно не удаляются:
+  их снимает `dropTable`, а его откат восстанавливает.
+- **Откат.** Changeset удаления ограничения несёт блок `rollback` с `add…Constraint` по принятой
+  модели. Liquibase откатывает changeset в обратном порядке: сначала снимает новые FK и наборы,
+  затем возвращает колонки и таблицы и только потом — удалённые FK, когда их цели уже на месте.
+- **Согласие.** Удаление ограничения данных не удаляет: в режиме `auto` оно не требует
+  `allow_drop` и не попадает в перечень удалений отчёта.
+- **Действие FK.** FK создаётся без `onDelete` и `onUpdate`, то есть с действием `NO ACTION`.
 
 ---
 
@@ -134,23 +417,22 @@ databaseChangeLog:
 
 ---
 
-## Добавляющие изменения
+## Неподдерживаемые изменения
 
-Changelog первой поставки выражает только новые таблицы и новые колонки существующих таблиц.
-Всё остальное — неаддитивное изменение: `forge generate` отклоняет модель кодом `1` и перечисляет
-все такие изменения сразу.
+Changelog выражает новые и удалённые таблицы, колонки, наборы уникальности и FK. Смена типа, итоговой допустимости NULL
+и первичного ключа — неподдерживаемое изменение: `forge generate` отклоняет модель кодом `1`
+и перечисляет все такие изменения сразу в поле ответа `non_additive`.
 
 | Код | Когда |
 |-----|-------|
-| `table_removed` | Таблица есть в принятой модели и отсутствует в модели попытки |
-| `column_removed` | Колонка есть в принятой модели и отсутствует в модели попытки |
 | `column_type_changed` | У колонки другой тип или другие параметры типа |
 | `column_nullable_changed` | У колонки другая итоговая допустимость NULL |
-| `primary_key_changed` | У таблицы другой набор или порядок колонок PK |
+| `primary_key_changed` | У таблицы другой набор или порядок колонок PK, в том числе удалена колонка PK |
 
 Уточнения:
 
-- **Переименование** неотличимо от удаления с добавлением и отклоняется как удаление.
+- **Переименование** неотличимо от удаления с добавлением: changelog удаляет прежнюю колонку
+  и добавляет новую.
 - **Итоговая допустимость NULL** учитывает PK: явное `nullable: false` у колонки PK изменением
   не считается.
 - **Порядок колонок таблицы** изменением не считается.
@@ -172,9 +454,9 @@ forge generate --model <модель попытки> [--accepted <принята
 
 | Код | Когда | Ответ |
 |-----|-------|-------|
-| `0` | Changelog записан | `changelog`, `logical_file_path`, перечень `changesets` с `id`, видом (`create_table`, `add_column`), таблицей и колонкой |
-| `1` | Модель попытки нарушает формат или требует неаддитивных изменений | `changelog: null`, `violations` как у `forge validate` либо `non_additive`; прежний файл `--out` удалён |
-| `2` | Нет беклога операции или `subject` не штамп; модель попытки не прочитать; принятая модель есть, но некорректна; без `--accepted` некорректен `FORGE_ACCEPTED_DIR` | Объект `error` с видом `operation_unavailable`, `model_unreadable`, `accepted_model_invalid` или `accepted_root_invalid` |
+| `0` | Changelog записан | `changelog`, `logical_file_path`, перечень `changesets` с `id`, видом (`create_table`, `add_column`, `drop_table`, `drop_column`, `add_unique`, `drop_unique`, `add_foreign_key`, `drop_foreign_key`), таблицей, колонкой и именем ограничения `constraint`; у видов ограничений `column` — `null`, у прочих `constraint` — `null` |
+| `1` | Модель попытки нарушает формат или требует неподдерживаемых изменений | `changelog: null`, `violations` как у `forge validate` либо `non_additive`; прежний файл `--out` удалён |
+| `2` | Нет беклога операции или `subject` не штамп; модель попытки не прочитать; принятая модель есть, но некорректна; без `--accepted` некорректен `FORGE_ACCEPTED_DIR`; удаления в режиме `auto` без согласия операции | Объект `error` с видом `operation_unavailable`, `model_unreadable`, `accepted_model_invalid`, `accepted_root_invalid` или `drop_not_allowed` с перечнем `objects`; при `drop_not_allowed` прежний файл `--out` удалён |
 
 При отказе прежний changelog удаляется, чтобы устаревший файл нельзя было накатить.
 
@@ -267,8 +549,19 @@ flowchart TD
 | `journal_clean` | В журнале нет записей changelog попытки |
 | `table_absent` | Нет таблицы, которую создаёт changelog попытки |
 | `column_absent` | Нет колонки, которую добавляет changelog попытки |
+| `table_present` | Есть таблица, которую удаляет changelog попытки: откат вернул её |
+| `column_present` | Есть колонка, которую удаляет changelog попытки: откат вернул её |
+| `unique_absent` | Нет набора уникальности, который добавляет changelog попытки |
+| `foreign_key_absent` | Нет внешнего ключа, который добавляет changelog попытки |
+| `unique_present` | Есть набор уникальности, который удаляет changelog попытки: откат вернул его |
+| `foreign_key_present` | Есть внешний ключ, который удаляет changelog попытки: откат вернул его |
 | `accepted_restored` | Только на запасном пути: принятый `master.yaml` накатан или его нет |
 | `attempt_objects` | Только без changelog попытки: объекты попытки не проверить, проверен один журнал |
+
+Ограничение ищется в `pg_constraint` по таблице, виду и имени из changelog попытки: имя
+вычисляется из содержимого, поэтому совпадает с тем, что создал или удалил накат. Наборы
+уникальности удаляемой таблицы отдельной проверки не получают: их возвращает откат `dropTable`,
+а проверка `table_present` подтверждает таблицу.
 
 Проверка смотрит только объекты попытки, а не всю схему. Полное сравнение схемы с моделью —
 сверка `forge reconcile`.
@@ -293,7 +586,13 @@ flowchart TD
 
 ## Ограничения и допущения
 
-- **Ограничение:** только PostgreSQL и только добавляющие изменения.
+- **Ограничение:** только PostgreSQL. Changelog добавляет и удаляет таблицы, колонки, наборы
+  уникальности и FK; смена типа, NULL и первичного ключа не поддерживается.
+- **Риск:** добавление FK или набора уникальности к таблице с данными, которые ему не отвечают,
+  завершается ошибкой Liquibase → попытка неуспешна с диагностикой, откат снимает применённое.
+  Данные перед добавлением ограничения не проверяются.
+- **Риск:** совпадение `hash8` у двух разных ограничений одной таблицы → ошибка наката, а не тихая
+  порча схемы; одинаковое содержимое фабрика модели отклоняет как повтор.
 - **Допущение:** схема целевой БД полностью управляется Liquibase, а принятая модель описывает её
   состояние.
 - **Ограничение:** корень проекта — текущий каталог: команды вызываются из корня, иначе шлюз
@@ -311,3 +610,5 @@ flowchart TD
 |--------|------|--------|-------|--------|--------------------|
 | 1.0.0 | 2026-10-18 | OpenSpec change `forge-migration` | Claude Code | Claude Opus 5.5 | Начальное создание: правила построения changelog с примером, идентичность changeset, состав добавляющих изменений и коды неаддитивных, команда `forge generate`, накат и `apply.json`, откат со схемой решений, проверка возврата, запасной путь с пересозданием БД |
 | 1.0.1 | 2026-10-21 | OpenSpec change `configurable-accepted-root` | Claude Code | Claude Opus 5.5 | Команда `forge generate`: `--accepted` необязателен, умолчание — `model.yaml` корня принятого состояния `FORGE_ACCEPTED_DIR`, код `2` с видом `accepted_root_invalid` при некорректном корне; запасной путь накатывает `master.yaml` корня принятого состояния вместо `db/changelog/master.yaml`; уточнено, что `logicalFilePath` не зависит от корня |
+| 1.0.2 | 2026-10-22 | OpenSpec change `add-drop-operations` | Claude Code | Claude Opus 5.5 | Удаление таблиц и колонок: раздел «Удаления» с примером и блоками `rollback`, порядок changeset, раздел «Неподдерживаемые изменения» без `table_removed`/`column_removed`, виды `drop_table`/`drop_column` и отказ `drop_not_allowed` в `forge generate`, проверки возврата `table_present`/`column_present`, ограничения |
+| 1.0.3 | 2026-10-22 | LBFR-015, OpenSpec change `add-model-relations` | Claude Code | Claude Opus 5.5 | Связи и уникальность: раздел «Связи и уникальность» с примером changelog ограничений, тождество по содержимому, имена `fk_`/`uq_<таблица>_<hash8>`, удаление таблицы со связями и откат; порядок changeset разбит на восемь групп, пример раздела «Changelog» приведён к нему — создание таблиц идёт раньше добавления колонок; виды changeset ограничений и поле `constraint` в ответе `forge generate`; проверки возврата `unique_absent`, `foreign_key_absent`, `unique_present`, `foreign_key_present`; риски наката ограничений |

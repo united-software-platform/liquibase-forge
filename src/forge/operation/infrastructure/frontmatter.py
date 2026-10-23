@@ -58,6 +58,15 @@ def _text(path: str, data: dict[str, Any], key: str) -> str:
     return value
 
 
+def _allow_drop(path: str, data: dict[str, Any]) -> bool:
+    value = data.get("allow_drop", False)
+    if not isinstance(value, bool):
+        raise OperationUnavailableError(
+            f"беклог операции {path}: allow_drop должен быть true или false, получено {value!r}"
+        )
+    return value
+
+
 def _attempts(path: str, data: dict[str, Any], key: str) -> dict[int, str | None]:
     block = data.get(key)
     if block is None:
@@ -101,6 +110,7 @@ class FrontmatterOperationReadRepository:
             directories={
                 n: trail.get(n) or str(parent / f"attempt-{n}") for n in range(1, ATTEMPT_LIMIT + 1)
             },
+            allow_drop=_allow_drop(path, data),
         )
 
     def open_operations(self) -> tuple[str, ...]:
@@ -125,7 +135,17 @@ def _scalar(value: str | None) -> str:
 
 
 class FrontmatterOperationWriteRepository:
-    """Реализация контракта записи операции: строки `status` и `stop_reason` фронтматтера."""
+    """Реализация контракта записи операции: строки `status`, `stop_reason` и `allow_drop`."""
+
+    def save_drop_consent(self, operation: Operation) -> None:
+        """`allow_drop: true` в беклоге операции и в порождённых беклогах попыток.
+
+        Строка заменяется, а в беклоге прежнего шаблона вставляется после `mode`; остальной
+        текст беклогов не меняется.
+        """
+        paths = [operation.path, *(a.backlog for a in operation.attempts if a.backlog)]
+        for path in paths:
+            _write_consent(Path(path))
 
     def save(self, operation: Operation) -> None:
         path = Path(operation.path)
@@ -154,3 +174,29 @@ class FrontmatterOperationWriteRepository:
         draft = path.with_name(path.name + ".tmp")
         draft.write_text("".join(lines), encoding="utf-8")
         os.replace(draft, path)
+
+
+def _write_consent(path: Path) -> None:
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
+    except (OSError, UnicodeDecodeError) as error:
+        raise OperationUnavailableError(f"беклог {path} не прочитать: {error}") from None
+    start, end = _bounds(lines, str(path))
+    consent_index = mode_index = None
+    for index in range(start + 1, end):
+        if lines[index].startswith("allow_drop:"):
+            consent_index = index
+        elif lines[index].startswith("mode:"):
+            mode_index = index
+    consent_line = "allow_drop: true\n"
+    if consent_index is not None:
+        if lines[consent_index] == consent_line:
+            return
+        lines[consent_index] = consent_line
+    elif mode_index is not None:
+        lines.insert(mode_index + 1, consent_line)
+    else:
+        raise OperationUnavailableError(f"в беклоге {path} нет mode")
+    draft = path.with_name(path.name + ".tmp")
+    draft.write_text("".join(lines), encoding="utf-8")
+    os.replace(draft, path)

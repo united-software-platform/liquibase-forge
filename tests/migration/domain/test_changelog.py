@@ -10,8 +10,8 @@ from forge.migration.domain.changelog import Changelog
 from forge.migration.domain.changes import (
     AddColumn,
     CreateTable,
-    NonAdditiveChange,
-    NonAdditiveChangeError,
+    UnsupportedChange,
+    UnsupportedChangeError,
 )
 from forge.migration.domain.stamp import OperationStamp
 from forge.modeling.domain.identifier import TableName
@@ -44,6 +44,6 @@ def test_changelog_is_immutable() -> None:
 
 def test_non_additive_error_requires_changes() -> None:
     with pytest.raises(ValueError):
-        NonAdditiveChangeError([])
-    error = NonAdditiveChangeError([NonAdditiveChange("table_removed", "t", None, "удалена")])
+        UnsupportedChangeError([])
+    error = UnsupportedChangeError([UnsupportedChange("table_removed", "t", None, "удалена")])
     assert error.changes[0].code == "table_removed"

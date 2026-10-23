@@ -1,0 +1,6 @@
+  # Сервисы инструмента Liquibase Forge (БД и Liquibase) объявлены в собственном файле
+  # docker/lbfr/docker-compose.yaml и здесь только подключаются. Файл лежит вне корня, чтобы
+  # Compose находил в корне один файл — этот. project_directory — корень проекта: относительные
+  # пути и .env подключаемого файла берутся от корня. Нужен Compose 2.20+
+  - path: docker/lbfr/docker-compose.yaml
+    project_directory: .

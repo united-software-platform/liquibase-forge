@@ -16,16 +16,33 @@ FORMAT_VERSION = 1
 class DataModel:
     """Полное целевое состояние схемы `public`: таблицы в порядке объявления.
 
-    Инвариант агрегата — уникальность имён таблиц; инварианты каждой таблицы обеспечивает
-    сама таблица. Модель без таблиц корректна: так выглядит принятая модель до первой операции.
+    Инварианты агрегата — уникальность имён таблиц и ссылки внешних ключей на таблицы модели
+    и их ключи; инварианты каждой таблицы обеспечивает сама таблица. Модель без таблиц
+    корректна: так выглядит принятая модель до первой операции.
     """
 
     tables: tuple[Table, ...]
 
     def __post_init__(self) -> None:
-        violations = DataModel.duplicate_names(enumerate(table.name for table in self.tables))
+        violations = list(
+            DataModel.duplicate_names(enumerate(table.name for table in self.tables)).values()
+        )
+        if not violations:
+            violations = self._reference_violations()
         if violations:
-            raise ModelViolationError(violations.values())
+            raise ModelViolationError(violations)
+
+    def _reference_violations(self) -> list[Violation]:
+        violations: list[Violation] = []
+        for position, table in enumerate(self.tables):
+            for index, key in enumerate(table.foreign_keys):
+                prefix = f"tables[{position}].foreign_keys[{index}]"
+                if not self.has_table(key.target):
+                    violations.append(unknown_target(key.target).under(prefix))
+                    continue
+                found = key.target_violations(table, self.table(key.target))
+                violations += [violation.under(prefix) for violation in found]
+        return violations
 
     @staticmethod
     def duplicate_names(names: Iterable[tuple[int, TableName]]) -> dict[int, Violation]:
@@ -55,3 +72,10 @@ class DataModel:
 
     def has_table(self, name: TableName) -> bool:
         return any(table.name == name for table in self.tables)
+
+
+def unknown_target(name: object) -> Violation:
+    """Нарушение ссылки внешнего ключа на таблицу, которой нет в модели; путь — от ключа."""
+    return Violation(
+        "references.table", "foreign_key_unknown_table", f"в модели нет таблицы {name}"
+    )

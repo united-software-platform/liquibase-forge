@@ -85,3 +85,23 @@ def test_unreadable_model_is_not_caught() -> None:
         ValidateModelUseCase(_StubReader(None), DataModelFactory()).execute(
             ValidateModelInput("missing.yaml")
         )
+
+
+def test_unique_violations_are_reported() -> None:
+    table = TableDraft(
+        0,
+        "customer",
+        (ColumnDraft("id", "bigint"), ColumnDraft("email", "text")),
+        ("id",),
+        unique=(("email", "phone"), ("id",), ("email",), ("email",)),
+    )
+
+    output = ValidateModelUseCase(
+        _StubReader(DraftReading(DataModelDraft((table,)), ())), DataModelFactory()
+    ).execute(ValidateModelInput("m.yaml"))
+
+    assert [(v.path, v.code) for v in output.violations] == [
+        ("tables[0].unique[0][1]", "unique_unknown_column"),
+        ("tables[0].unique[1]", "unique_equals_primary_key"),
+        ("tables[0].unique[3]", "unique_duplicate"),
+    ]

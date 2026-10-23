@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from forge.modeling.application.model_reading import ModelUnreadableError
-from forge.modeling.domain.draft import ColumnDraft, TableDraft
+from forge.modeling.domain.draft import ColumnDraft, ForeignKeyDraft, TableDraft
 from forge.modeling.infrastructure.yaml_reader import YamlModelDraftReader, parse_model
 from tests.modeling.example import EXAMPLE
 
@@ -237,6 +237,100 @@ def test_empty_lists_are_kept_for_domain_checks() -> None:
 
     assert reading.violations == ()
     assert reading.draft.tables == (TableDraft(0, "customer", (), ()),)
+
+
+def _relations(body: str) -> str:
+    """Таблица `tables[0]` с колонками `id`, `parent_id` и полями связей из тела `body`."""
+    lines = "\n".join("    " + line for line in body.strip().splitlines())
+    return _model(
+        "  - name: category\n    columns:\n      - {name: id, type: bigint}\n"
+        f"      - {{name: parent_id, type: bigint}}\n    primary_key: [id]\n{lines}\n"
+    )
+
+
+def test_relations_are_read_into_draft() -> None:
+    reading = parse_model(
+        _relations(
+            "unique:\n  - [parent_id, id]\nforeign_keys:\n"
+            "  - columns: [parent_id]\n    references: {table: category, columns: [id]}"
+        )
+    )
+
+    assert reading.violations == ()
+    (table,) = reading.draft.tables
+    assert table.unique == (("parent_id", "id"),)
+    assert table.foreign_keys == (ForeignKeyDraft(("parent_id",), "category", ("id",)),)
+
+
+def test_absent_relations_are_empty() -> None:
+    (table,) = parse_model(_model(TABLE)).draft.tables
+
+    assert (table.unique, table.foreign_keys) == ((), ())
+
+
+@pytest.mark.parametrize(
+    ("body", "expected"),
+    [
+        ("unique: parent_id", [("tables[0].unique", "wrong_kind")]),
+        ("unique: [parent_id]", [("tables[0].unique[0]", "wrong_kind")]),
+        ("unique: [[parent_id, 7]]", [("tables[0].unique[0][1]", "wrong_kind")]),
+        ("foreign_keys: {columns: [parent_id]}", [("tables[0].foreign_keys", "wrong_kind")]),
+        ("foreign_keys: [parent_id]", [("tables[0].foreign_keys[0]", "wrong_kind")]),
+        (
+            "foreign_keys:\n  - columns: [parent_id]",
+            [("tables[0].foreign_keys[0].references", "missing_field")],
+        ),
+        (
+            "foreign_keys:\n  - references: {table: category, columns: [id]}",
+            [("tables[0].foreign_keys[0].columns", "missing_field")],
+        ),
+        (
+            "foreign_keys:\n  - columns: parent_id\n"
+            "    references: {table: category, columns: [id]}",
+            [("tables[0].foreign_keys[0].columns", "wrong_kind")],
+        ),
+        (
+            "foreign_keys:\n  - columns: [parent_id]\n    references: category",
+            [("tables[0].foreign_keys[0].references", "wrong_kind")],
+        ),
+        (
+            "foreign_keys:\n  - columns: [parent_id]\n    references: {columns: [id]}",
+            [("tables[0].foreign_keys[0].references.table", "missing_field")],
+        ),
+        (
+            "foreign_keys:\n  - columns: [parent_id]\n    references: {table: category}",
+            [("tables[0].foreign_keys[0].references.columns", "missing_field")],
+        ),
+        (
+            "foreign_keys:\n  - columns: [parent_id]\n    references: {table: 7, columns: [id]}",
+            [("tables[0].foreign_keys[0].references.table", "wrong_kind")],
+        ),
+        (
+            "foreign_keys:\n  - columns: [parent_id]\n"
+            "    references: {table: category, columns: [id], schema: public}",
+            [("tables[0].foreign_keys[0].references.schema", "unknown_field")],
+        ),
+        (
+            "foreign_keys:\n  - columns: [parent_id]\n"
+            "    references: {table: category, columns: [id]}\n    on_delete: cascade",
+            [("tables[0].foreign_keys[0].on_delete", "unknown_field")],
+        ),
+    ],
+)
+def test_relations_structure(body: str, expected: list[tuple[str, str]]) -> None:
+    reading = parse_model(_relations(body))
+
+    assert [(v.path, v.code) for v in reading.violations] == expected
+    assert reading.draft.tables == ()
+
+
+def test_excluded_table_names_are_kept() -> None:
+    reading = parse_model(
+        _model(TABLE + "  - name: invoice\n    columns: []\n    primary_key: [id]\n    unique: x\n")
+    )
+
+    assert reading.draft.excluded == ("invoice",)
+    assert [table.name for table in reading.draft.tables] == ["customer"]
 
 
 def test_yaml_syntax_error_has_line_and_column() -> None:

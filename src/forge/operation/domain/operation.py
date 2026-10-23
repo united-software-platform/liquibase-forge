@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 ATTEMPT_LIMIT = 3
+AUTO = "auto"
 SUCCESS = "success"
 FAILURE = "failure"
 
@@ -34,6 +35,10 @@ class OperationClosedError(OperationTransitionError):
 
 class OperationNotStoppedError(OperationTransitionError):
     """Продолжить можно только остановленную операцию."""
+
+
+class OperationDropConsentError(OperationTransitionError):
+    """Согласие на удаления даётся только операции в режиме `auto`."""
 
 
 class OperationNotClosableError(OperationTransitionError):
@@ -64,10 +69,11 @@ class CloseOutcome:
 
 
 class Operation:
-    """Операция: намерение, режим, статус, причина остановки и три попытки.
+    """Операция: намерение, режим, согласие на удаления, статус, причина остановки и попытки.
 
     Статус меняют только операции агрегата: `stop`, `resume`, `close`. Вердикты попыток
-    записывает исполнение беклога, агрегат их только читает.
+    записывает исполнение беклога, агрегат их только читает. Согласие `allow_drop` задаётся
+    при начале операции либо даётся остановленной операции в режиме `auto` и не снимается.
     """
 
     def __init__(
@@ -79,11 +85,13 @@ class Operation:
         status: OperationStatus,
         stop_reason: str | None,
         attempts: tuple[Attempt, ...],
+        allow_drop: bool = False,
     ) -> None:
         self.path = path
         self.stamp = stamp
         self.intent = intent
         self.mode = mode
+        self.allow_drop = allow_drop
         self._status = status
         self._stop_reason = stop_reason
         self.attempts = attempts
@@ -114,6 +122,20 @@ class Operation:
             raise OperationClosedError(f"операция закрыта со статусом {self._status}")
         self._status = OperationStatus.STOPPED
         self._stop_reason = reason
+
+    def grant_drop(self) -> None:
+        """Дать согласие на удаления остановленной операции в `auto`; повтор ничего не меняет."""
+        if self._status.closed:
+            raise OperationClosedError(f"операция закрыта со статусом {self._status}")
+        if self._status is not OperationStatus.STOPPED:
+            raise OperationNotStoppedError(
+                f"согласие даётся только остановленной операции: статус {self._status}"
+            )
+        if self.mode != AUTO:
+            raise OperationDropConsentError(
+                f"согласие на удаления действует только в режиме auto, режим операции {self.mode}"
+            )
+        self.allow_drop = True
 
     def resume(self) -> None:
         """Продолжить остановленную операцию."""

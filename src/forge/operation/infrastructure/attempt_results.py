@@ -1,4 +1,4 @@
-"""Чтение `reconcile.json` и `rollback.json` каталога попытки."""
+"""Чтение `reconcile.json` и `rollback.json` каталога попытки и удалений changelog."""
 
 from __future__ import annotations
 
@@ -6,7 +6,10 @@ import json
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 from forge.operation.application.accepted_state import (
+    DestructiveChange,
     DiscrepancySummary,
     ReconcileSummary,
     RollbackSummary,
@@ -60,3 +63,29 @@ class JsonAttemptResultsReader:
             verified=document.get("verified") is True,
             fallback_reason=document.get("fallback_reason"),
         )
+
+    def destructive(self, changelog: str) -> tuple[DestructiveChange, ...]:
+        return _destructive(changelog)
+
+
+def _destructive(path: str) -> tuple[DestructiveChange, ...]:
+    """Удаления changelog по блокам `changes`: только формы `dropTable` и `dropColumn`.
+
+    Формат changelog знает запись контекста Миграция; здесь читаются только эти две формы,
+    и тест сверяет их с выводом записи.
+    """
+    try:
+        document = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
+        found: list[DestructiveChange] = []
+        for entry in document["databaseChangeLog"] or []:
+            for change in entry["changeSet"]["changes"]:
+                if "dropTable" in change:
+                    found.append(DestructiveChange(str(change["dropTable"]["tableName"]), None))
+                elif "dropColumn" in change:
+                    dropped = change["dropColumn"]
+                    found.append(
+                        DestructiveChange(str(dropped["tableName"]), str(dropped["columnName"]))
+                    )
+    except (OSError, UnicodeDecodeError, yaml.YAMLError, KeyError, TypeError):
+        return ()
+    return tuple(found)
