@@ -2,7 +2,9 @@
 
 ## Purpose
 
-TBD - created by archiving change add-forge-installer. Update Purpose after archive.
+Установка Liquibase Forge в целевой проект с SDD Developer Kit: выбор версии, состав поставки
+по перечню, маркированные блоки в файлах kit'а, манифест установки, защита правок владельца,
+коды возврата установщика и запуск CLI одной командой.
 
 ## Requirements
 

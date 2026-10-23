@@ -68,8 +68,20 @@ def test_single_input_is_bump_level() -> None:
     assert inputs["bump"]["options"] == ["patch", "minor", "major"]
 
 
-def test_only_contents_write_permission() -> None:
-    assert _workflow()["permissions"] == {"contents": "write"}
+def test_write_permission_only_for_release_job() -> None:
+    jobs = _workflow()["jobs"]
+
+    assert _workflow()["permissions"] == {"contents": "read"}
+    assert jobs["release"]["permissions"] == {"contents": "write"}
+    assert jobs["checks"]["permissions"] == {"contents": "read"}
+
+
+def test_release_runs_after_checks() -> None:
+    jobs = _workflow()["jobs"]
+
+    assert list(jobs) == ["checks", "release"]
+    assert jobs["checks"]["uses"] == "./.github/workflows/checks.yml"
+    assert jobs["release"]["needs"] == "checks"
 
 
 def test_main_branch_gate_comes_first() -> None:

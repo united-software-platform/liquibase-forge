@@ -45,18 +45,19 @@ Liquibase Forge строит модель данных PostgreSQL по наме�
 curl -fsSL https://raw.githubusercontent.com/united-software-platform/liquibase-forge/main/install.sh | sh
 ```
 
-Без ключей ставится последний релиз forge; другую версию задаёт `--ref`:
+Без ключей ставится последний релиз forge; другую версию задаёт `--ref` с тегом из
+[Releases](https://github.com/united-software-platform/liquibase-forge/releases):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/united-software-platform/liquibase-forge/main/install.sh | sh -s -- --ref v0.2.0
+curl -fsSL https://raw.githubusercontent.com/united-software-platform/liquibase-forge/main/install.sh | sh -s -- --ref vX.Y.Z
 ```
 
 Установщик сначала печатает план — какие файлы и блоки он создаст, обновит и оставит как есть, —
 и только потом пишет. Посмотреть план без записи можно ключом `--dry-run`, перечень ключей печатает
 ключ `--help`. CLI `forge` ложится в `tools/forge/` и с `pyproject.toml` вашего проекта
-не пересекается. В `Makefile`, `.env.example`, `docker-compose.yml`, `tools/host-runner/runner.py`
-и `.gitignore` установщик пишет только между строками `# >>> liquibase-forge`
-и `# <<< liquibase-forge`: ваш текст вне маркеров он не трогает.
+не пересекается. В файлы вашего проекта, которые план называет блоками, установщик пишет только
+между строками `# >>> liquibase-forge` и `# <<< liquibase-forge`: ваш текст вне маркеров он
+не трогает.
 
 Если вы правили файл поставки или блок forge, установщик отметит это в плане как правку владельца
 и спросит, перезаписать ли её; `--yes` перезаписывает без вопроса. Если forge уже перенесён в проект
@@ -72,6 +73,8 @@ curl -fsSL https://raw.githubusercontent.com/united-software-platform/liquibase-
 Закоммитьте поставку вместе с `.forge-manifest.json`: по суммам в манифесте следующий запуск
 установщика отличает ваши правки от прежней версии forge. После переустановки kit'а запустите
 установщик forge снова — он вернёт блоки, которые kit стёр.
+
+Подробнее — [кейс 7](./docs/use-cases.md#кейс-7-хочу-обновить-forge-до-новой-версии).
 
 ---
 
@@ -151,7 +154,8 @@ claude plugin install backlog@formular
 ## Куда дальше
 
 - Схема с хоста, занятый порт, продолжение операции, перенос принятого состояния, другие БД
-  и версии Liquibase — в [документе кейсов](./docs/use-cases.md).
+  и версии Liquibase, обновление forge, удаления в режиме `auto` —
+  в [документе кейсов](./docs/use-cases.md).
 - Статусы операции, команды `forge` с кодами возврата и итоговый отчёт —
   в [docs/operation.md](./docs/operation.md), changelog и откат — в [docs/migration.md](./docs/migration.md),
   сверка — в [docs/reconciliation.md](./docs/reconciliation.md), формат модели —
@@ -163,6 +167,20 @@ claude plugin install backlog@formular
 
 ## Ограничения
 
+- **Только PostgreSQL и схема `public`.** Сверка видит таблицы, колонки, первичные ключи, наборы
+  уникальности и FK; представления, индексы и `CHECK` вне модели —
+  см. [docs/reconciliation.md](./docs/reconciliation.md#ограничения-и-допущения).
+- **Только БД из перечня тестовых.** Накат и откат идут лишь на БД из `FORGE_TEST_DB_ALLOWLIST`;
+  production БД forge не предназначен. Схемой БД должен управлять только Liquibase Forge —
+  см. [docs/migration.md](./docs/migration.md#ограничения-и-допущения).
+- **Смена типа, NULL и первичного ключа не поддерживается.** Такую модель `forge generate`
+  отклоняет, переименование выражается удалением и добавлением —
+  см. [docs/migration.md](./docs/migration.md#неподдерживаемые-изменения).
+- **Удаление теряет данные.** Откат удаления восстанавливает структуру, но не данные; в режиме
+  `auto` удаления требуют ключа `--allow-drop` —
+  см. [docs/operation.md](./docs/operation.md#согласие-на-удаления).
+- **Не больше трёх попыток и одной открытой операции.** Закрытую операцию отменить нельзя —
+  см. [docs/operation.md](./docs/operation.md#ограничения-и-допущения).
 - **Установщик не удаляет forge.** Файлы, которые новая версия больше не поставляет, план называет,
   но удалять их и сам forge из проекта приходится вручную.
 - **Liquibase 5.x распространяется под лицензией FSL**, а не Apache 2.0. FSL ограничивает только
