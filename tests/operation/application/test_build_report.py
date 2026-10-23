@@ -70,6 +70,31 @@ def test_failure_lists_only_trail(tmp_path: Path) -> None:
     )
 
 
+def test_abandoned_lists_only_trail_and_reason(tmp_path: Path) -> None:
+    path = legacy(tmp_path / "trail")
+    _attempts(path, "success")
+    set_values(path, status="abandoned")
+    text = path.read_text(encoding="utf-8").replace(
+        "status: abandoned\n", 'status: abandoned\nstop_reason: "передумал"\n', 1
+    )
+    path.write_text(text, encoding="utf-8")
+    rollback = path.parent / "attempt-1" / "rollback.json"
+    rollback.parent.mkdir(parents=True)
+    rollback.write_text(
+        '{"action": "liquibase_rollback", "rolled_back": 3, "verified": true}', encoding="utf-8"
+    )
+
+    output = _report(tmp_path, path)
+
+    assert (output.operation.status, output.operation.stop_reason) == ("abandoned", "передумал")
+    assert output.attempts[0].rollback is not None and output.attempts[0].rollback.verified
+    assert output.accepted is None
+    assert output.commit_files == (
+        f"{path.parent.as_posix()}/",
+        f"backlog/forge-apply/{STAMP}-1/",
+    )
+
+
 @pytest.mark.parametrize("status", ["running", "stopped"])
 def test_open_operation_has_no_commit_files(tmp_path: Path, status: str) -> None:
     path = legacy(tmp_path / "trail")

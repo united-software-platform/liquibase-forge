@@ -27,6 +27,7 @@ def _rollback(
     db: FakeDatabase,
     verdict: str | None = "failure",
     allowlist: str = "lbfr-db-test:5432/*",
+    discard: bool = False,
     **options: str,
 ) -> tuple[RollbackAttemptOutput, FakeWriter]:
     writer = FakeWriter()
@@ -44,7 +45,7 @@ def _rollback(
         ),
         **options,
     )
-    return use_case.execute(RollbackAttemptInput("trail/tasks.md", 1)), writer
+    return use_case.execute(RollbackAttemptInput("trail/tasks.md", 1, discard=discard)), writer
 
 
 def test_success_verdict_changes_nothing() -> None:
@@ -55,6 +56,19 @@ def test_success_verdict_changes_nothing() -> None:
 
     assert (output.action, output.verified, output.result_path) == ("none", True, None)
     assert db.calls == [] and writer.documents == {}
+
+
+def test_discard_rolls_back_success_verdict() -> None:
+    db = FakeDatabase()
+    db.apply_attempt(3)
+
+    output, writer = _rollback(db, verdict="success", discard=True)
+
+    assert db.calls == ["rollback 3"]
+    assert (output.action, output.rolled_back, output.verified) == ("liquibase_rollback", 3, True)
+    assert output.result_path == "trail/attempt-1/rollback.json"
+    document = writer.documents["trail/attempt-1/rollback.json"]
+    assert (document["verdict"], document["verified"]) == ("success", True)
 
 
 @pytest.mark.parametrize("verdict", ["failure", None])

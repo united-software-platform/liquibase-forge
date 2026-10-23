@@ -72,6 +72,31 @@ def build_use_case(accepted_master_path: str | None = None) -> RollbackAttemptUs
     )
 
 
+# Ошибки окружения сценария отката: общие для `forge rollback` и отката при `forge abandon`
+ROLLBACK_ERRORS = (
+    OperationRecordUnavailableError,
+    SettingsUnavailableError,
+    DatabaseNotAllowedError,
+    DatabaseUnavailableError,
+    GatewayUnavailableError,
+)
+
+
+def rollback_environment_error(error: Exception, operation: str) -> int:
+    """Ответ и код `2` на ошибку окружения из `ROLLBACK_ERRORS`."""
+    if isinstance(error, OperationRecordUnavailableError):
+        return environment_error("operation_unavailable", str(error), operation=operation)
+    if isinstance(error, SettingsUnavailableError):
+        return environment_error("settings_unavailable", str(error))
+    if isinstance(error, DatabaseNotAllowedError):
+        return environment_error("database_not_allowed", str(error))
+    if isinstance(error, DatabaseUnavailableError):
+        return environment_error("database_unavailable", str(error))
+    if isinstance(error, GatewayUnavailableError):
+        return environment_error(error.kind, str(error))
+    raise error
+
+
 def run(args: argparse.Namespace, use_case: RollbackAttemptUseCaseInterface | None = None) -> int:
     """`0` — возврат подтверждён или откатывать нечего, `1` — не подтверждён, `2` — окружение."""
     operation: str = args.operation
@@ -79,16 +104,8 @@ def run(args: argparse.Namespace, use_case: RollbackAttemptUseCaseInterface | No
         output = (use_case or build_use_case()).execute(
             RollbackAttemptInput(operation, args.attempt)
         )
-    except OperationRecordUnavailableError as error:
-        return environment_error("operation_unavailable", str(error), operation=operation)
-    except SettingsUnavailableError as error:
-        return environment_error("settings_unavailable", str(error))
-    except DatabaseNotAllowedError as error:
-        return environment_error("database_not_allowed", str(error))
-    except DatabaseUnavailableError as error:
-        return environment_error("database_unavailable", str(error))
-    except GatewayUnavailableError as error:
-        return environment_error(error.kind, str(error))
+    except ROLLBACK_ERRORS as error:
+        return rollback_environment_error(error, operation)
     emit(
         {
             "attempt": output.attempt,

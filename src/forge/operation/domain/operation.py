@@ -13,16 +13,18 @@ FAILURE = "failure"
 
 
 class OperationStatus(StrEnum):
-    """Статус операции: открыта (`running`, `stopped`) либо закрыта (`success`, `failure`)."""
+    """Статус операции: открыта (`running`, `stopped`) либо закрыта (`success`, `failure`,
+    `abandoned` — брошена владельцем, ничего не принято)."""
 
     RUNNING = "running"
     STOPPED = "stopped"
     SUCCESS = "success"
     FAILURE = "failure"
+    ABANDONED = "abandoned"
 
     @property
     def closed(self) -> bool:
-        return self in (OperationStatus.SUCCESS, OperationStatus.FAILURE)
+        return self in (OperationStatus.SUCCESS, OperationStatus.FAILURE, OperationStatus.ABANDONED)
 
 
 class OperationTransitionError(Exception):
@@ -45,6 +47,14 @@ class OperationNotClosableError(OperationTransitionError):
     """Закрывать операцию рано: нет ни подтверждённой попытки, ни трёх неудач с откатом."""
 
 
+class OperationNotAbandonableError(OperationTransitionError):
+    """Бросить операцию нельзя: откат начатой попытки не подтверждён."""
+
+    def __init__(self, attempts: tuple[int, ...]) -> None:
+        super().__init__(f"откат не подтверждён у попыток {', '.join(map(str, attempts))}")
+        self.attempts = attempts
+
+
 @dataclass(frozen=True)
 class Attempt:
     """Попытка: номер, вердикт сверки, беклог попытки и каталог её артефактов."""
@@ -58,6 +68,11 @@ class Attempt:
     def used(self) -> bool:
         return self.verdict is not None
 
+    @property
+    def started(self) -> bool:
+        """Попытка начата: её беклог порождён, накат мог состояться и без вердикта."""
+        return self.backlog is not None
+
 
 @dataclass(frozen=True)
 class CloseOutcome:
@@ -68,10 +83,18 @@ class CloseOutcome:
     changed: bool
 
 
+@dataclass(frozen=True)
+class AbandonOutcome:
+    """Исход отказа: статус и был ли отказ сейчас."""
+
+    status: OperationStatus
+    changed: bool
+
+
 class Operation:
     """Операция: намерение, режим, согласие на удаления, статус, причина остановки и попытки.
 
-    Статус меняют только операции агрегата: `stop`, `resume`, `close`. Вердикты попыток
+    Статус меняют только операции агрегата: `stop`, `resume`, `close`, `abandon`. Вердикты попыток
     записывает исполнение беклога, агрегат их только читает. Согласие `allow_drop` задаётся
     при начале операции либо даётся остановленной операции в режиме `auto` и не снимается.
     """
@@ -112,6 +135,10 @@ class Operation:
     @property
     def used_attempts(self) -> int:
         return sum(1 for attempt in self.attempts if attempt.used)
+
+    @property
+    def started_attempts(self) -> tuple[Attempt, ...]:
+        return tuple(attempt for attempt in self.attempts if attempt.started)
 
     def attempt(self, number: int) -> Attempt:
         return next(a for a in self.attempts if a.number == number)
@@ -174,3 +201,23 @@ class Operation:
             else f"подтверждённой попытки нет, неуспешных попыток {len(failed)} из {ATTEMPT_LIMIT}"
         )
         raise OperationNotClosableError(f"закрывать рано: {reason}")
+
+    def abandon(self, reason: str, rollbacks: Mapping[int, bool]) -> AbandonOutcome:
+        """Бросить открытую операцию по решению владельца; причина пишется в `stop_reason`.
+
+        `rollbacks` — подтверждён ли откат начатой попытки. Откатывает не агрегат: он только
+        проверяет, что схема возвращена по каждой начатой попытке. Повторный отказ от брошенной
+        операции ничего не меняет; операцию, закрытую с `success` или `failure`, бросить нельзя.
+        """
+        if self._status is OperationStatus.ABANDONED:
+            return AbandonOutcome(self._status, changed=False)
+        if self._status.closed:
+            raise OperationClosedError(f"операция закрыта со статусом {self._status}")
+        unconfirmed = tuple(
+            a.number for a in self.started_attempts if not rollbacks.get(a.number, False)
+        )
+        if unconfirmed:
+            raise OperationNotAbandonableError(unconfirmed)
+        self._status = OperationStatus.ABANDONED
+        self._stop_reason = reason
+        return AbandonOutcome(self._status, changed=True)

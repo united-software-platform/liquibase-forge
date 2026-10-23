@@ -6,6 +6,7 @@ import os
 import uuid
 from collections.abc import Iterator
 from dataclasses import dataclass, replace
+from typing import NoReturn
 
 import psycopg
 import pytest
@@ -36,11 +37,25 @@ class TestDatabase:
         )
 
 
+def environment_missing(reason: str) -> NoReturn:
+    """Пропустить тест без окружения, а при `FORGE_REQUIRE_INTEGRATION=1` — завершить его ошибкой.
+
+    Признак задаёт workflow проверок: в CI окружение поднято, и пропуск означал бы, что оно
+    не дошло до тестов, — такой прогон не должен выглядеть зелёным. Локально без признака
+    поведение прежнее: пропуск с причиной.
+    """
+    if os.environ.get("FORGE_REQUIRE_INTEGRATION") == "1":
+        pytest.fail(f"{reason} (FORGE_REQUIRE_INTEGRATION=1: пропуск запрещён)")
+    pytest.skip(reason)
+
+
 def _server() -> TestDatabase:
     """Служебная БД сервера `lbfr-db-test`, из которой создаются и удаляются БД тестов."""
     host = os.environ.get("FORGE_TEST_DB_HOST", "")
     if not host:
-        pytest.skip("FORGE_TEST_DB_HOST не задан: сервер БД интеграционных тестов не настроен")
+        environment_missing(
+            "FORGE_TEST_DB_HOST не задан: сервер БД интеграционных тестов не настроен"
+        )
     return TestDatabase(
         host=host,
         port=int(os.environ.get("FORGE_TEST_DB_PORT", "5432")),
@@ -54,7 +69,8 @@ def _server() -> TestDatabase:
 def test_database() -> Iterator[TestDatabase]:
     """Создать БД `t_<uuid>` на время теста и удалить её после.
 
-    Без `FORGE_TEST_DB_HOST` тест пропускается с причиной. Если сервер задан, но недоступен,
+    Без `FORGE_TEST_DB_HOST` тест пропускается с причиной (при `FORGE_REQUIRE_INTEGRATION=1` —
+    падает). Если сервер задан, но недоступен,
     тест падает: недоступная среда не должна выглядеть зелёным прогоном.
     """
     server = _server()

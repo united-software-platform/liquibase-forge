@@ -9,6 +9,7 @@ from forge.operation.domain.operation import (
     Operation,
     OperationClosedError,
     OperationDropConsentError,
+    OperationNotAbandonableError,
     OperationNotClosableError,
     OperationNotStoppedError,
     OperationStatus,
@@ -202,3 +203,100 @@ def test_consent_is_not_granted_in_interactive_mode() -> None:
 def test_consent_is_not_granted_to_closed_operation(status: str) -> None:
     with pytest.raises(OperationClosedError):
         _with_mode("auto", status).grant_drop()
+
+
+# --- Отказ ------------------------------------------------------------------------------------
+
+
+def _started(
+    status: str = "running",
+    verdicts: tuple[str | None, str | None, str | None] = (None, None, None),
+    started: int = 0,
+) -> Operation:
+    """Операция, у которой начаты первые `started` попыток: их беклоги порождены."""
+    return OperationFactory().restore(
+        path="backlog/forge-model/20261017-153000/tasks.md",
+        stamp="20261017-153000",
+        intent="Таблица клиентов",
+        mode="auto",
+        status=status,
+        stop_reason="стоп-знак" if status == "stopped" else None,
+        attempts=[
+            (
+                verdict,
+                f"backlog/forge-apply/20261017-153000-{n}/tasks.md" if n <= started else None,
+                f"backlog/forge-model/20261017-153000/attempt-{n}",
+            )
+            for n, verdict in enumerate(verdicts, start=1)
+        ],
+    )
+
+
+def test_abandon_without_started_attempts() -> None:
+    operation = _started("stopped")
+
+    outcome = operation.abandon("передумал", {})
+
+    assert (outcome.status, outcome.changed) == (OperationStatus.ABANDONED, True)
+    assert operation.status is OperationStatus.ABANDONED
+    assert operation.stop_reason == "передумал"
+
+
+def test_abandon_after_confirmed_rollback_of_success() -> None:
+    operation = _started(verdicts=("success", None, None), started=1)
+
+    outcome = operation.abandon("передумал", {1: True})
+
+    assert outcome.status is OperationStatus.ABANDONED
+    assert operation.confirmed_attempt is not None  # вердикт попытки не переписывается
+
+
+def test_abandon_with_unconfirmed_rollback() -> None:
+    operation = _started(verdicts=("failure", None, None), started=2)
+
+    with pytest.raises(OperationNotAbandonableError) as error:
+        operation.abandon("передумал", {1: True, 2: False})
+
+    assert error.value.attempts == (2,)
+    assert (operation.status, operation.stop_reason) == (OperationStatus.RUNNING, None)
+
+
+def test_repeated_abandon_changes_nothing() -> None:
+    operation = _started("abandoned", started=1)
+
+    outcome = operation.abandon("снова", {})
+
+    assert (outcome.status, outcome.changed) == (OperationStatus.ABANDONED, False)
+    assert operation.stop_reason is None
+
+
+@pytest.mark.parametrize(
+    ("status", "verdicts"),
+    [("success", ("success", None, None)), ("failure", ("failure",) * 3)],
+)
+def test_closed_operation_is_not_abandoned(
+    status: str, verdicts: tuple[str | None, str | None, str | None]
+) -> None:
+    operation = _started(status, verdicts, started=3)
+
+    with pytest.raises(OperationClosedError):
+        operation.abandon("передумал", {1: True, 2: True, 3: True})
+    assert operation.status.value == status
+
+
+def test_abandoned_operation_is_closed() -> None:
+    operation = _started("abandoned", ("success", None, None), started=1)
+
+    assert operation.status.closed
+    with pytest.raises(OperationClosedError):
+        operation.stop("x")
+    with pytest.raises(OperationClosedError):
+        operation.resume()
+    with pytest.raises(OperationClosedError):
+        operation.grant_drop()
+    outcome = operation.close({})
+    assert (outcome.status, outcome.accepted_attempt, outcome.changed) == (
+        OperationStatus.ABANDONED,
+        None,
+        False,
+    )

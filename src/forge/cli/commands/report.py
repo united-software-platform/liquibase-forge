@@ -24,6 +24,7 @@ from forge.operation.infrastructure.attempt_results import JsonAttemptResultsRea
 from forge.shared.application.settings import SettingsUnavailableError
 
 FAILURE = "failure"
+ABANDONED = "abandoned"
 SUCCESS_HINT = (
     "Принятое состояние и след операции не закоммичены: закоммитьте эти файлы и каталоги, "
     "указав код и номер задачи в сообщении коммита"
@@ -32,6 +33,11 @@ FAILURE_HINT = (
     "Принятое состояние не изменилось; след операции объясняет почему: закоммитьте эти каталоги, "
     "указав код и номер задачи в сообщении коммита"
 )
+ABANDONED_HINT = (
+    "Операция брошена, принятое состояние не изменилось; причина — в stop_reason: закоммитьте "
+    "эти каталоги, указав код и номер задачи в сообщении коммита"
+)
+HINTS = {FAILURE: FAILURE_HINT, ABANDONED: ABANDONED_HINT}
 
 
 def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -88,7 +94,7 @@ def report_payload(output: BuildReportOutput) -> dict[str, Any]:
         "commit": (
             {
                 "files": list(output.commit_files),
-                "hint": FAILURE_HINT if output.operation.status == FAILURE else SUCCESS_HINT,
+                "hint": HINTS.get(output.operation.status, SUCCESS_HINT),
             }
             if output.commit_files is not None
             else None

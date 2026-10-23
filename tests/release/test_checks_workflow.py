@@ -1,4 +1,5 @@
-"""Workflow проверок `.github/workflows/checks.yml`: триггеры, права и совпадение с CONTRIBUTING.md.
+"""Workflow проверок `.github/workflows/checks.yml`: триггеры, права, совпадение с CONTRIBUTING.md
+и закрепление версий действий.
 
 Перечень проверок живёт в двух местах — в разделе «Проверки» `CONTRIBUTING.md` для локального
 прогона и в шагах workflow для CI. Тест сравнивает их, чтобы новая проверка не попала только
@@ -15,22 +16,47 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = ROOT / ".github" / "workflows" / "checks.yml"
+RELEASE_WORKFLOW = ROOT / ".github" / "workflows" / "release.yml"
 CONTRIBUTING = ROOT / "CONTRIBUTING.md"
+INTEGRATION_ENV = ROOT / "tools" / "ci" / "integration-env.sh"
 
-# Установка зависимостей нужна только CI: локально окружение uv уже есть
-CI_ONLY = {"uv sync --frozen"}
+ENV_COMMAND = "sh tools/ci/integration-env.sh"
+LOGS_COMMAND = "cat .forge/ci/runner.log; docker compose logs lbfr-db-test || true"
+
+# Нужны только CI: локально окружение uv уже есть, окружение интеграционных тестов поднимает
+# make forge-env-up вместе с раннером на хосте, а журналы печатаются только при сбое job'а
+CI_ONLY = {"uv sync --frozen", ENV_COMMAND, LOGS_COMMAND}
+
+
+def _load(path: Path) -> dict[Any, Any]:
+    loaded = yaml.safe_load(path.read_text(encoding="utf-8"))
+    assert isinstance(loaded, dict)
+    return loaded
 
 
 def _workflow() -> dict[Any, Any]:
-    loaded = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
-    assert isinstance(loaded, dict)
-    return loaded
+    return _load(WORKFLOW)
+
+
+def _action_refs(path: Path, action: str) -> set[str]:
+    """Версии, на которых workflow закрепляет действие `action`, по всем шагам всех job'ов."""
+    return {
+        step["uses"].split("@", 1)[1]
+        for job in _load(path)["jobs"].values()
+        for step in job.get("steps", [])
+        if step.get("uses", "").split("@", 1)[0] == action
+    }
 
 
 def _steps() -> list[dict[str, Any]]:
     steps = _workflow()["jobs"]["checks"]["steps"]
     assert isinstance(steps, list)
     return steps
+
+
+def _run_index(command: str) -> int:
+    """Номер шага, команда которого — `command`."""
+    return next(i for i, step in enumerate(_steps()) if step.get("run", "").strip() == command)
 
 
 def _workflow_commands() -> set[str]:
@@ -91,13 +117,46 @@ def test_no_check_is_allowed_to_fail() -> None:
     assert all("continue-on-error" not in step for step in _steps())
 
 
-def test_environment_for_skipped_tests_is_not_set() -> None:
-    env_keys = {key for step in _steps() for key in step.get("env", {})}
-    env_keys |= set(_workflow().get("env", {})) | set(_workflow()["jobs"]["checks"].get("env", {}))
+def test_integration_environment_comes_before_tests() -> None:
+    assert _run_index(ENV_COMMAND) < _run_index("uv run pytest")
+    assert "if" not in _steps()[_run_index(ENV_COMMAND)]
 
-    assert not env_keys & {"FORGE_TEST_DB_HOST", "AGENT_RUNNER_URL", "AGENT_RUNNER_TOKEN"}
+
+def test_logs_are_printed_only_on_failure() -> None:
+    logs = _run_index(LOGS_COMMAND)
+
+    assert logs == len(_steps()) - 1
+    assert _steps()[logs]["if"] == "failure()"
+
+
+def test_integration_tests_are_required() -> None:
+    # Признак задаёт скрипт через $GITHUB_ENV: без него пропуск интеграционных тестов был бы зелёным
+    script = INTEGRATION_ENV.read_text(encoding="utf-8")
+
+    assert 'echo "FORGE_REQUIRE_INTEGRATION=1"' in script
+    assert '>> "$GITHUB_ENV"' in script
 
 
 def test_makefile_check_uses_norm() -> None:
     assert "sh tools/make-lint/check.sh" in _workflow_commands()
     assert not any("--max-lines" in command for command in _workflow_commands())
+
+
+# --- Версии действий -------------------------------------------------------------------------
+
+
+def test_checkout_version_is_same_in_both_workflows() -> None:
+    # Иначе обновление одного файла молча оставит второй на старой среде исполнения
+    checks = _action_refs(WORKFLOW, "actions/checkout")
+    release = _action_refs(RELEASE_WORKFLOW, "actions/checkout")
+
+    assert len(checks) == 1
+    assert checks == release
+
+
+def test_setup_uv_is_pinned_to_exact_release() -> None:
+    # С v8 у setup-uv нет плавающих тегов vN и vN.M: укороченная версия упала бы уже на GitHub
+    refs = _action_refs(WORKFLOW, "astral-sh/setup-uv")
+
+    assert len(refs) == 1
+    assert all(re.fullmatch(r"v\d+\.\d+\.\d+", ref) for ref in refs)

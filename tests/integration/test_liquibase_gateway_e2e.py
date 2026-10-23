@@ -1,7 +1,7 @@
 """Сквозная проверка шлюза Liquibase: агент пишет запрос, раннер на хосте исполняет цель.
 
 Нужны раннер (`AGENT_RUNNER_URL`, `AGENT_RUNNER_TOKEN`) и сервер `lbfr-db-test`; без них
-тесты пропускаются с причиной.
+тесты пропускаются с причиной, а при `FORGE_REQUIRE_INTEGRATION=1` падают.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from typing import Any
 import psycopg
 import pytest
 
-from tests.conftest import TestDatabase
+from tests.conftest import TestDatabase, environment_missing
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 REQUEST_PATH = PROJECT_ROOT / ".forge" / "liquibase-request.json"
@@ -31,7 +31,7 @@ def runner() -> tuple[str, str]:
     url = os.environ.get("AGENT_RUNNER_URL", "")
     token = os.environ.get("AGENT_RUNNER_TOKEN", "")
     if not url or not token:
-        pytest.skip("AGENT_RUNNER_URL или AGENT_RUNNER_TOKEN не заданы: раннер не настроен")
+        environment_missing("AGENT_RUNNER_URL или AGENT_RUNNER_TOKEN не заданы: раннер не настроен")
     return url, token
 
 

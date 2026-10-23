@@ -52,6 +52,9 @@ class RollbackDependencies:
 class RollbackAttemptUseCase:
     """После вердикта `success` ничего не меняет; иначе снимает применённые changeset попытки.
 
+    Исключение — откат при отказе от операции (`discard`): подтверждённая попытка откатывается
+    тем же порядком, что неуспешная, и в `rollback.json` пишется её фактический вердикт.
+
     Откат Liquibase выполняется, только если записи попытки — хвост журнала и changelog
     попытки на месте. Иначе, как и при ошибке Liquibase, целевая БД пересоздаётся и получает
     принятый changelog `accepted_master` — `master.yaml` корня принятого состояния. Затем
@@ -66,7 +69,7 @@ class RollbackAttemptUseCase:
     def execute(self, input: RollbackAttemptInput) -> RollbackAttemptOutput:
         record = self._deps.operations.read(input.operation_path)
         verdict = record.verdict(input.attempt)
-        if verdict == "success":
+        if verdict == "success" and not input.discard:
             return RollbackAttemptOutput(None, input.attempt, verdict, "none", 0, None, (), True)
 
         target = self._deps.settings.target()
