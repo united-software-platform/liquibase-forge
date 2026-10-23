@@ -18,9 +18,14 @@ ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = ROOT / ".github" / "workflows" / "checks.yml"
 RELEASE_WORKFLOW = ROOT / ".github" / "workflows" / "release.yml"
 CONTRIBUTING = ROOT / "CONTRIBUTING.md"
+INTEGRATION_ENV = ROOT / "tools" / "ci" / "integration-env.sh"
 
-# Установка зависимостей нужна только CI: локально окружение uv уже есть
-CI_ONLY = {"uv sync --frozen"}
+ENV_COMMAND = "sh tools/ci/integration-env.sh"
+LOGS_COMMAND = "cat .forge/ci/runner.log; docker compose logs lbfr-db-test || true"
+
+# Нужны только CI: локально окружение uv уже есть, окружение интеграционных тестов поднимает
+# make forge-env-up вместе с раннером на хосте, а журналы печатаются только при сбое job'а
+CI_ONLY = {"uv sync --frozen", ENV_COMMAND, LOGS_COMMAND}
 
 
 def _load(path: Path) -> dict[Any, Any]:
@@ -47,6 +52,11 @@ def _steps() -> list[dict[str, Any]]:
     steps = _workflow()["jobs"]["checks"]["steps"]
     assert isinstance(steps, list)
     return steps
+
+
+def _run_index(command: str) -> int:
+    """Номер шага, команда которого — `command`."""
+    return next(i for i, step in enumerate(_steps()) if step.get("run", "").strip() == command)
 
 
 def _workflow_commands() -> set[str]:
@@ -107,11 +117,24 @@ def test_no_check_is_allowed_to_fail() -> None:
     assert all("continue-on-error" not in step for step in _steps())
 
 
-def test_environment_for_skipped_tests_is_not_set() -> None:
-    env_keys = {key for step in _steps() for key in step.get("env", {})}
-    env_keys |= set(_workflow().get("env", {})) | set(_workflow()["jobs"]["checks"].get("env", {}))
+def test_integration_environment_comes_before_tests() -> None:
+    assert _run_index(ENV_COMMAND) < _run_index("uv run pytest")
+    assert "if" not in _steps()[_run_index(ENV_COMMAND)]
 
-    assert not env_keys & {"FORGE_TEST_DB_HOST", "AGENT_RUNNER_URL", "AGENT_RUNNER_TOKEN"}
+
+def test_logs_are_printed_only_on_failure() -> None:
+    logs = _run_index(LOGS_COMMAND)
+
+    assert logs == len(_steps()) - 1
+    assert _steps()[logs]["if"] == "failure()"
+
+
+def test_integration_tests_are_required() -> None:
+    # Признак задаёт скрипт через $GITHUB_ENV: без него пропуск интеграционных тестов был бы зелёным
+    script = INTEGRATION_ENV.read_text(encoding="utf-8")
+
+    assert 'echo "FORGE_REQUIRE_INTEGRATION=1"' in script
+    assert '>> "$GITHUB_ENV"' in script
 
 
 def test_makefile_check_uses_norm() -> None:

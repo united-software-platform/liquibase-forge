@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.conftest import TestDatabase
+from tests.conftest import TestDatabase, environment_missing
 from tests.integration.migration_support import PROJECT_ROOT, STAMP
 from tests.migration.operation_backlog import write_operation
 
@@ -18,7 +18,7 @@ from tests.migration.operation_backlog import write_operation
 @pytest.fixture
 def runner_configured() -> None:
     if not os.environ.get("AGENT_RUNNER_URL") or not os.environ.get("AGENT_RUNNER_TOKEN"):
-        pytest.skip("AGENT_RUNNER_URL или AGENT_RUNNER_TOKEN не заданы: раннер не настроен")
+        environment_missing("AGENT_RUNNER_URL или AGENT_RUNNER_TOKEN не заданы: раннер не настроен")
 
 
 @pytest.fixture
