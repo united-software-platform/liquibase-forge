@@ -29,6 +29,11 @@ SUDO_STUB = """#!/bin/sh
 cat >> "$STUB_DIR/hosts"
 """
 
+# Утилиты, которые нужны скрипту помимо заглушек. PATH собирается только из них: на машине CI
+# в /usr/bin есть настоящий docker, и тест отсутствия Docker нашёл бы его
+TOOLS = ("sed", "tail", "od", "tr", "basename", "dirname", "mkdir", "cat", "awk", "nohup", "sleep")
+SH = shutil.which("sh") or "/bin/sh"
+
 # python3: запуск раннера пишет в журнал и завершается, проба отвечает кодом из PROBE_CODE
 PYTHON_STUB = """#!/bin/sh
 if [ "$1" = -c ]; then exit "${PROBE_CODE:-0}"; fi
@@ -47,15 +52,19 @@ def _run(
     for name, text in stubs.items():
         (bin_dir / name).write_text(text)
         (bin_dir / name).chmod(0o755)
+    for tool in TOOLS:
+        found = shutil.which(tool)
+        assert found is not None, tool
+        (bin_dir / tool).symlink_to(found)
     work = tmp_path / "work"
     work.mkdir()
     shutil.copy(ENV_EXAMPLE, work / ".env.example")
     (tmp_path / "github_env").write_text("")
     return subprocess.run(
-        ["sh", str(SCRIPT)],
+        [SH, str(SCRIPT)],
         cwd=work,
         env={
-            "PATH": f"{bin_dir}:/usr/bin:/bin",
+            "PATH": str(bin_dir),
             "STUB_DIR": str(tmp_path),
             "GITHUB_ENV": str(tmp_path / "github_env"),
             "RUNNER_WAIT": "2",
@@ -115,7 +124,7 @@ def test_variables_for_next_steps(tmp_path: Path) -> None:
     assert exported["FORGE_REQUIRE_INTEGRATION"] == "1"
     assert exported["AGENT_RUNNER_TOKEN"] == env["AGENT_RUNNER_TOKEN"]
     assert exported["AGENT_RUNNER_URL"] == env["AGENT_RUNNER_URL"]
-    for name in ("HOST", "PORT", "NAME", "USER", "PASSWORD"):
+    for name in ("HOST", "PORT", "NAME", "USER", "PASSWORD", "ALLOWLIST"):
         assert exported[f"FORGE_TEST_DB_{name}"] == env[f"FORGE_TEST_DB_{name}"]
 
 
@@ -137,11 +146,9 @@ def test_old_compose_is_environment_error(tmp_path: Path) -> None:
 def test_existing_env_is_not_overwritten(tmp_path: Path) -> None:
     (tmp_path / "work").mkdir()
     (tmp_path / "work" / ".env").write_text("AGENT_RUNNER_TOKEN=личный\n")
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
     shutil.copy(ENV_EXAMPLE, tmp_path / "work" / ".env.example")
     result = subprocess.run(
-        ["sh", str(SCRIPT)],
+        [SH, str(SCRIPT)],
         cwd=tmp_path / "work",
         env={"PATH": "/usr/bin:/bin", "GITHUB_ENV": str(tmp_path / "github_env")},
         capture_output=True,

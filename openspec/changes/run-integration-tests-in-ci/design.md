@@ -72,9 +72,10 @@ Workflow `checks` — один job на `ubuntu-latest` с шагами uv, `uv 
 1. Строка `/etc/hosts`.
 1. `nohup python3 tools/host-runner/runner.py >"$RUNNER_LOG" 2>&1 &` с переменными из `.env`.
    Затем ожидание до 30 секунд, пока раннер не ответит на цель `help` с токеном. Процесс живёт до конца job'а.
-1. Вывод в `$GITHUB_ENV`: `FORGE_TEST_DB_HOST/PORT/NAME/USER/PASSWORD`, `AGENT_RUNNER_URL`,
+1. Вывод в `$GITHUB_ENV`: `FORGE_TEST_DB_HOST/PORT/NAME/USER/PASSWORD/ALLOWLIST`, `AGENT_RUNNER_URL`,
    `AGENT_RUNNER_TOKEN`, `FORGE_REQUIRE_INTEGRATION=1`. Токен перед этим маскируется
-   (`::add-mask::`).
+   (`::add-mask::`). Перечень тестовых БД нужен не только шлюзу: CLI `forge` в процессе тестов
+   проверяет по нему целевую БД. Локально его даёт окружение контейнера агента, в CI — этот вывод.
 
 Коды возврата: `0` — окружение готово, `1` — сервис или раннер не поднялись (с выводом причины),
 `2` — нет Docker или `.env.example`.

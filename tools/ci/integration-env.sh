@@ -112,8 +112,10 @@ echo "Раннер отвечает на $url"
 # --- Переменные следующих шагов --------------------------------------------------------------
 
 {
+    # Перечень тестовых БД читает и CLI forge в процессе тестов, а не только шлюз через .env:
+    # локально его даёт окружение контейнера агента
     for name in FORGE_TEST_DB_HOST FORGE_TEST_DB_PORT FORGE_TEST_DB_NAME FORGE_TEST_DB_USER \
-        FORGE_TEST_DB_PASSWORD; do
+        FORGE_TEST_DB_PASSWORD FORGE_TEST_DB_ALLOWLIST; do
         echo "$name=$(env_value "$name")"
     done
     echo "AGENT_RUNNER_URL=$url"
