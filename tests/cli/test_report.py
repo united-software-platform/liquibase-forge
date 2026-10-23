@@ -141,6 +141,41 @@ def test_stopped_operation(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -
     assert (payload["attempts"], payload["model"], payload["commit"]) == ([], None, None)
 
 
+def test_abandoned_operation(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    path = legacy(tmp_path / "trail")
+    set_values(
+        path,
+        status="abandoned",
+        verdict__attempt_1="success",
+        backlog__attempt_1=f"backlog/forge-apply/{STAMP}-1/tasks.md",
+    )
+    text = path.read_text(encoding="utf-8").replace(
+        "status: abandoned\n", 'status: abandoned\nstop_reason: "передумал"\n'
+    )
+    path.write_text(text, encoding="utf-8")
+    directory = path.parent / "attempt-1"
+    directory.mkdir()
+    (directory / "rollback.json").write_text(
+        json.dumps({"action": "liquibase_rollback", "rolled_back": 3, "verified": True}),
+        encoding="utf-8",
+    )
+
+    code, payload = _report(tmp_path, capsys, path)
+
+    assert code == 0
+    assert (payload["operation"]["status"], payload["operation"]["stop_reason"]) == (
+        "abandoned",
+        "передумал",
+    )
+    assert payload["attempts"][0]["rollback"]["verified"] is True
+    assert payload["accepted"] is None
+    assert payload["commit"]["files"] == [
+        f"{path.parent.as_posix()}/",
+        f"backlog/forge-apply/{STAMP}-1/",
+    ]
+    assert payload["commit"]["hint"] == report.ABANDONED_HINT
+
+
 def test_missing_backlog(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     code, payload = _report(tmp_path, capsys, tmp_path / "tasks.md")
 

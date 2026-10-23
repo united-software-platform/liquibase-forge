@@ -33,7 +33,8 @@ class BuildReportUseCase:
     В отчёт входят попытки, которые начались: с вердиктом или порождённым беклогом.
     Итоговые модель и changelog — принятые файлы корня принятого состояния при `success`,
     иначе файлы последней начатой попытки. Файлы для коммита называются только у закрытой
-    операции: след операции, а при `success` — и принятые файлы.
+    операции — `success`, `failure` или `abandoned`: след операции, а при `success` — и принятые
+    файлы.
     """
 
     def __init__(
@@ -80,7 +81,7 @@ class BuildReportUseCase:
         destructive = self._results.destructive(changelog) if changelog is not None else ()
         backlogs = (operation.path, *(a.backlog for a in attempts if a.backlog is not None))
         commit_files: tuple[str, ...] | None = None
-        if operation.status in (OperationStatus.SUCCESS, OperationStatus.FAILURE):
+        if operation.status.closed:
             trail = tuple(_directory(backlog) for backlog in backlogs)
             files = (accepted.model, accepted.changelog, accepted.master) if accepted else ()
             commit_files = (*files, *trail)

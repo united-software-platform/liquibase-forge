@@ -527,6 +527,11 @@ flowchart TD
 - **Хвост журнала.** Последние `k` записей по порядку исполнения — ровно записи попытки, и их `id`
   есть в changelog попытки. Иначе Liquibase rollback не вызывается.
 - **Вердикт `success`.** Команда только печатает ответ с `action: none` и не пишет `rollback.json`.
+- **Откат при отказе.** Единственное исключение для вердикта `success` — отказ от операции:
+  `forge abandon` откатывает и подтверждённую попытку тем же порядком, что неуспешную, с проверкой
+  возврата и записью `rollback.json` с фактическим вердиктом. Ключа для этого у `forge rollback`
+  нет: откат подтверждённой попытки без закрытия операции рассогласовал бы вердикт и БД. Порядок
+  отказа — в [operation.md](./operation.md#отказ-от-операции).
 
 | Код | Когда |
 |-----|-------|
@@ -612,3 +617,4 @@ flowchart TD
 | 1.0.1 | 2026-10-21 | OpenSpec change `configurable-accepted-root` | Claude Code | Claude Opus 5.5 | Команда `forge generate`: `--accepted` необязателен, умолчание — `model.yaml` корня принятого состояния `FORGE_ACCEPTED_DIR`, код `2` с видом `accepted_root_invalid` при некорректном корне; запасной путь накатывает `master.yaml` корня принятого состояния вместо `db/changelog/master.yaml`; уточнено, что `logicalFilePath` не зависит от корня |
 | 1.0.2 | 2026-10-22 | OpenSpec change `add-drop-operations` | Claude Code | Claude Opus 5.5 | Удаление таблиц и колонок: раздел «Удаления» с примером и блоками `rollback`, порядок changeset, раздел «Неподдерживаемые изменения» без `table_removed`/`column_removed`, виды `drop_table`/`drop_column` и отказ `drop_not_allowed` в `forge generate`, проверки возврата `table_present`/`column_present`, ограничения |
 | 1.0.3 | 2026-10-22 | LBFR-015, OpenSpec change `add-model-relations` | Claude Code | Claude Opus 5.5 | Связи и уникальность: раздел «Связи и уникальность» с примером changelog ограничений, тождество по содержимому, имена `fk_`/`uq_<таблица>_<hash8>`, удаление таблицы со связями и откат; порядок changeset разбит на восемь групп, пример раздела «Changelog» приведён к нему — создание таблиц идёт раньше добавления колонок; виды changeset ограничений и поле `constraint` в ответе `forge generate`; проверки возврата `unique_absent`, `foreign_key_absent`, `unique_present`, `foreign_key_present`; риски наката ограничений |
+| 1.0.4 | 2026-10-23 | LBFR-022, OpenSpec change `add-operation-abandon` | Claude Code | Claude Opus 5.5 | Раздел «Откат»: исключение для вердикта `success` при отказе от операции — `forge abandon` откатывает подтверждённую попытку с проверкой возврата и записью `rollback.json`, у `forge rollback` такого ключа нет |
