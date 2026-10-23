@@ -19,6 +19,7 @@
 # образа у forge нет, — а после тега публикуется GitHub Release, по которому установщик находит
 # последнюю версию. Третье отличие — гейт ветки: выпуск идёт только из main. Четвёртое — проверки:
 # первым job'ом прогоняется workflow checks, и версия не повышается на коммите, где они не пройдены.
+# Пятое — гейт задач: версия не выпускается, пока в milestone её номера есть открытые задачи.
 name: release
 
 on:
@@ -35,7 +36,8 @@ on:
 
 # Права верхнего уровня получают все job'ы, в том числе вызванный workflow проверок, поэтому
 # здесь — только чтение. Право на запись нужно ровно job'у release: он коммитит VERSION, публикует
-# тег и создаёт релиз. Права на запуск пайплайнов, как у kit'а, не нужно: сборки образа нет.
+# тег и создаёт релиз; ему же — чтение задач для гейта задач выпуска. Права на запуск пайплайнов,
+# как у kit'а, не нужно: сборки образа нет.
 permissions:
   contents: read
 
@@ -52,8 +54,10 @@ jobs:
     name: Повышение версии, тег и релиз
     needs: checks
     runs-on: ubuntu-latest
+    # issues: read — только чтение: гейт задач выпуска читает milestone и его задачи
     permissions:
       contents: write
+      issues: read
 
     steps:
       # Ручной запуск позволяет выбрать любую ветку, а git push origin HEAD опубликовал бы
@@ -90,6 +94,26 @@ jobs:
           echo "current=$current" >> "$GITHUB_OUTPUT"
           echo "next=$major.$minor.$patch" >> "$GITHUB_OUTPUT"
           echo "$current -> $major.$minor.$patch"
+
+      # Состав выпуска задаёт milestone vX.Y.Z нового номера: выпуск идёт, только когда все его
+      # задачи закрыты. Имя берётся из вычисленного номера, поэтому второго ввода у сценария нет.
+      # Нет milestone — тоже ошибка: иначе достаточно забыть его завести, и гейт молча выключен.
+      # API задач отдаёт и PR, привязанные к milestone: открытый PR — тоже незавершённая работа.
+      # NEXT уже проверен как МАЖОР.МИНОР.ПАТЧ, поэтому его подстановка в выражение --jq безопасна.
+      - name: Гейт задач выпуска
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEXT: ${{ steps.version.outputs.next }}
+        run: |
+          milestone=$(gh api "repos/$GITHUB_REPOSITORY/milestones?state=all&per_page=100" --paginate \
+              --jq ".[] | select(.title == \"v$NEXT\") | .number")
+          [ -n "$milestone" ] \
+              || { echo "Нет milestone v$NEXT: состав выпуска не задан" >&2; exit 1; }
+          open=$(gh api "repos/$GITHUB_REPOSITORY/issues?milestone=$milestone&state=open&per_page=100" \
+              --paginate --jq '.[] | "#\(.number) \(.title)"')
+          [ -z "$open" ] || { echo "В milestone v$NEXT открыты задачи:" >&2
+                              echo "$open" >&2; exit 1; }
+          echo "Все задачи milestone v$NEXT закрыты"
 
       # Гейт GIT-020: новая версия не пишется поверх незафиксированной работы.
       - name: Гейт незакоммиченных правок
