@@ -3,6 +3,7 @@
 Логика проверяется на тексте сценария: тест берёт скрипт шага разбора версии и исполняет его
 через `sh` с временными `VERSION` и `GITHUB_OUTPUT` — ровно тот код, что работает в GitHub.
 Гейт задач выпуска исполняется так же, а `gh` в `PATH` подменяет заглушка с готовыми ответами.
+Гейт ключа развёртывания исполняется с пустым и непустым значением секрета.
 """
 
 from __future__ import annotations
@@ -153,6 +154,64 @@ def test_input_is_passed_through_env() -> None:
 
     assert "${{" not in step["run"]
     assert step["env"]["BUMP"] == "${{ inputs.bump }}"
+
+
+def _uses_index(action: str) -> int:
+    """Номер первого шага, вызывающего действие `action`."""
+    return next(
+        index
+        for index, step in enumerate(_steps())
+        if step.get("uses", "").split("@", 1)[0] == action
+    )
+
+
+def test_deploy_key_gate_between_branch_gate_and_checkout() -> None:
+    gate = _step_index("RELEASE_DEPLOY_KEY")
+    step = _steps()[gate]
+
+    assert 0 < gate < _uses_index("actions/checkout")
+    assert "${{" not in step["run"]
+    assert step["env"]["RELEASE_DEPLOY_KEY"] == "${{ secrets.RELEASE_DEPLOY_KEY }}"
+
+
+def test_checkout_uses_deploy_key() -> None:
+    step = _steps()[_uses_index("actions/checkout")]
+
+    assert step["with"]["ssh-key"] == "${{ secrets.RELEASE_DEPLOY_KEY }}"
+    assert "persist-credentials" not in step["with"]
+
+
+def test_git_push_is_never_forced() -> None:
+    pushes = [
+        line for step in _steps() for line in step.get("run", "").splitlines() if "git push" in line
+    ]
+
+    assert pushes
+    assert not any("--force" in line or " -f" in line for line in pushes)
+
+
+def _deploy_key_gate(key: str) -> subprocess.CompletedProcess[str]:
+    script = _steps()[_step_index("RELEASE_DEPLOY_KEY")]["run"]
+    return subprocess.run(
+        ["sh", "-e", "-c", script],
+        env={"PATH": "/usr/bin:/bin", "RELEASE_DEPLOY_KEY": key},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def test_deploy_key_gate_stops_without_key() -> None:
+    result = _deploy_key_gate("")
+
+    assert result.returncode != 0
+    assert "RELEASE_DEPLOY_KEY не задан" in result.stderr
+
+
+def test_deploy_key_gate_passes_with_key() -> None:
+    result = _deploy_key_gate("-----BEGIN OPENSSH PRIVATE KEY-----")
+
+    assert result.returncode == 0, result.stderr
 
 
 def test_issues_gate_between_version_and_write() -> None:
