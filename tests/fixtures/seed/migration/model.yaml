@@ -1,0 +1,19 @@
+version: 1
+tables:
+  - name: status_group
+    columns:
+      - {name: code, type: string, length: 16}
+      - {name: title, type: text, nullable: false}
+    primary_key: [code]
+  - name: order_status
+    columns:
+      - {name: code, type: string, length: 32}
+      - {name: group_code, type: string, length: 16, nullable: false}
+      - {name: title, type: text, nullable: false}
+      - {name: fee, type: decimal, precision: 12, scale: 2}
+    primary_key: [code]
+    unique:
+      - [title]
+    foreign_keys:
+      - columns: [group_code]
+        references: {table: status_group, columns: [code]}

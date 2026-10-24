@@ -53,6 +53,7 @@ def _rollback(db: FakeDatabase) -> Callable[[], RollbackAttemptUseCaseInterface]
                 changelogs=db,
                 journal=db,
                 schema=db,
+                rows=db,
                 recreator=db,
                 gateway=db,
                 writer=JsonResultWriter(),

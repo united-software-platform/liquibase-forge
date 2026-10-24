@@ -17,6 +17,7 @@ from forge.migration.application.changelog_storage import (
     ChangelogSummary,
     ChangelogUnreadableError,
     ConstraintRef,
+    RowRef,
 )
 from forge.migration.domain.changelog import Changelog, ChangeSet
 from forge.migration.domain.changes import (
@@ -276,8 +277,15 @@ class LiquibaseYamlChangelogReader:
             ) from None
 
 
+# Действия changelog данных `forge generate-seed`
+_DATA_ACTIONS = frozenset({"insert", "update", "delete"})
+
+
 def _summary(document: Any) -> ChangelogSummary:
-    """Сводка по блокам `changes`; блоки `rollback` в неё не входят."""
+    """Сводка по блокам `changes`; блоки `rollback` изменений схемы в неё не входят.
+
+    У changeset данных из блока `rollback` берутся условия и прежние значения строк: см. `_rows`.
+    """
     ids: list[str] = []
     tables: list[str] = []
     columns: list[tuple[str, str]] = []
@@ -285,11 +293,14 @@ def _summary(document: Any) -> ChangelogSummary:
     dropped_columns: list[tuple[str, str]] = []
     constraints: list[ConstraintRef] = []
     dropped_constraints: list[ConstraintRef] = []
+    rows: dict[str, list[RowRef]] = {action: [] for action in _DATA_ACTIONS}
     paths: set[str] = set()
     for entry in document["databaseChangeLog"] or []:
         changeset = entry["changeSet"]
         ids.append(str(changeset["id"]))
         paths.add(str(changeset["logicalFilePath"]))
+        for action, row in _rows(changeset):
+            rows[action].append(row)
         for change in changeset["changes"]:
             if "createTable" in change:
                 tables.append(str(change["createTable"]["tableName"]))
@@ -327,6 +338,44 @@ def _summary(document: Any) -> ChangelogSummary:
         dropped_columns=tuple(dropped_columns),
         constraints=tuple(constraints),
         dropped_constraints=tuple(dropped_constraints),
+        inserted_rows=tuple(rows["insert"]),
+        updated_rows=tuple(rows["update"]),
+        deleted_rows=tuple(rows["delete"]),
+    )
+
+
+def _rows(changeset: Any) -> list[tuple[str, RowRef]]:
+    """Строки changeset данных: действие и строка с условием и литералами из отката.
+
+    Откат строит `forge generate-seed` в обратном порядке, по действию на строку: вставке
+    отвечает удаление с условием на ключ, изменению — изменение к прежним значениям,
+    удалению — вставка всех прежних значений.
+    """
+    forward = [change for change in changeset["changes"] if _DATA_ACTIONS & change.keys()]
+    if not forward:
+        return []
+    backward = list(reversed(changeset["rollback"]))
+    if len(backward) != len(forward):
+        raise TypeError(f"у changeset {changeset['id']} откат не по действию на строку")
+    found: list[tuple[str, RowRef]] = []
+    for change, restore in zip(forward, backward, strict=True):
+        if "insert" in change:
+            body = restore["delete"]
+            found.append(("insert", RowRef(str(body["tableName"]), str(body["where"]))))
+        elif "update" in change:
+            body = restore["update"]
+            row = RowRef(str(body["tableName"]), str(body["where"]), _literals(body))
+            found.append(("update", row))
+        else:
+            where = str(change["delete"]["where"])
+            body = restore["insert"]
+            found.append(("delete", RowRef(str(body["tableName"]), where, _literals(body))))
+    return found
+
+
+def _literals(body: Any) -> tuple[tuple[str, str], ...]:
+    return tuple(
+        (str(c["column"]["name"]), str(c["column"]["valueComputed"])) for c in body["columns"]
     )
 
 

@@ -532,6 +532,9 @@ flowchart TD
   возврата и записью `rollback.json` с фактическим вердиктом. Ключа для этого у `forge rollback`
   нет: откат подтверждённой попытки без закрытия операции рассогласовал бы вердикт и БД. Порядок
   отказа — в [operation.md](./operation.md#отказ-от-операции).
+- **Changelog данных.** Changeset `forge generate-seed` снимаются тем же `rollback-count`: каждый
+  несёт явный блок `rollback`, построенный из принятого seed. Подробнее — в
+  [seed-migration.md](./seed-migration.md#откат).
 
 | Код | Когда |
 |-----|-------|
@@ -560,6 +563,9 @@ flowchart TD
 | `foreign_key_absent` | Нет внешнего ключа, который добавляет changelog попытки |
 | `unique_present` | Есть набор уникальности, который удаляет changelog попытки: откат вернул его |
 | `foreign_key_present` | Есть внешний ключ, который удаляет changelog попытки: откат вернул его |
+| `row_absent` | Нет строки, которую вставляет changelog данных попытки |
+| `row_present` | Есть строка, которую удаляет changelog данных попытки, со значениями из её отката |
+| `row_restored` | Строка, которую изменяет changelog данных попытки, имеет прежние значения из её отката |
 | `accepted_restored` | Только на запасном пути: принятый `master.yaml` накатан или его нет |
 | `attempt_objects` | Только без changelog попытки: объекты попытки не проверить, проверен один журнал |
 
@@ -568,8 +574,16 @@ flowchart TD
 уникальности удаляемой таблицы отдельной проверки не получают: их возвращает откат `dropTable`,
 а проверка `table_present` подтверждает таблицу.
 
-Проверка смотрит только объекты попытки, а не всю схему. Полное сравнение схемы с моделью —
-сверка `forge reconcile`.
+Строка проверяется одним запросом по условию на первичный ключ и литералам из changelog попытки:
+`SELECT count(*) FROM <таблица> WHERE <условие> AND <колонка> IS NOT DISTINCT FROM <литерал> …`.
+Ожидается `0` строк для `row_absent` и `1` для `row_present` и `row_restored`. Модель и seed
+для проверки не нужны: условие и литералы берутся из блоков `changes` и `rollback` changelog
+попытки, как объекты схемы. На запасном пути строки возвращает накат `master.yaml` вместе
+с принятыми changelog данных. Changelog модели проверок строк не получает. Как строится
+changelog данных — в [seed-migration.md](./seed-migration.md).
+
+Проверка смотрит только объекты и строки попытки, а не всю схему и все строки. Полное сравнение
+схемы с моделью — сверка `forge reconcile`.
 
 ---
 
@@ -618,3 +632,4 @@ flowchart TD
 | 1.0.2 | 2026-10-22 | OpenSpec change `add-drop-operations` | Claude Code | Claude Opus 5.5 | Удаление таблиц и колонок: раздел «Удаления» с примером и блоками `rollback`, порядок changeset, раздел «Неподдерживаемые изменения» без `table_removed`/`column_removed`, виды `drop_table`/`drop_column` и отказ `drop_not_allowed` в `forge generate`, проверки возврата `table_present`/`column_present`, ограничения |
 | 1.0.3 | 2026-10-22 | LBFR-015, OpenSpec change `add-model-relations` | Claude Code | Claude Opus 5.5 | Связи и уникальность: раздел «Связи и уникальность» с примером changelog ограничений, тождество по содержимому, имена `fk_`/`uq_<таблица>_<hash8>`, удаление таблицы со связями и откат; порядок changeset разбит на восемь групп, пример раздела «Changelog» приведён к нему — создание таблиц идёт раньше добавления колонок; виды changeset ограничений и поле `constraint` в ответе `forge generate`; проверки возврата `unique_absent`, `foreign_key_absent`, `unique_present`, `foreign_key_present`; риски наката ограничений |
 | 1.0.4 | 2026-10-23 | LBFR-022, OpenSpec change `add-operation-abandon` | Claude Code | Claude Opus 5.5 | Раздел «Откат»: исключение для вердикта `success` при отказе от операции — `forge abandon` откатывает подтверждённую попытку с проверкой возврата и записью `rollback.json`, у `forge rollback` такого ключа нет |
+| 1.0.5 | 2026-10-24 | LBFR-028, OpenSpec change `add-seed-migration` | Claude Code | Claude Opus 5.5 | Changelog данных `forge generate-seed`: в разделе «Откат» — откат changeset данных тем же `rollback-count` по явным блокам `rollback`; в разделе «Проверка возврата» — проверки строк `row_absent`, `row_present`, `row_restored` запросом `count(*)` с `IS NOT DISTINCT FROM` по литералам changelog попытки, возврат строк на запасном пути; добавлены ссылки на `seed-migration.md` |

@@ -39,6 +39,7 @@ def _rollback(
             changelogs=db,
             journal=db,
             schema=db,
+            rows=db,
             recreator=db,
             gateway=db,
             writer=writer,

@@ -34,6 +34,13 @@ class SeedUnreadableError(Exception):
         self.reason = reason
 
 
+class SeedNotFoundError(SeedUnreadableError):
+    """Файла seed нет."""
+
+    def __init__(self, path: str) -> None:
+        super().__init__(path, "файла нет")
+
+
 class SeedDraftReaderInterface(Protocol):
     """Чтение файла seed и проверка его структуры."""
 

@@ -5,23 +5,23 @@
 
 ## 1. Разница seed
 
-- [ ] 1.1 Реализовать в `src/forge/seeding/domain/` разницу принятого seed и seed попытки по PK в нормализованной форме: вставки, изменения только отличающихся колонок, удаления, очистка таблицы, убранной из seed; проверка: тесты `tests/seeding/domain/` по сценариям требований «Changelog данных строится из разницы seed» и «Таблица, убранная из seed, очищается», включая `"1.50"` против `"1.5"`
-- [ ] 1.2 Реализовать порядок по `design.md`: вставки → изменения → удаления, топологический порядок строк по FK с разрешением равенств по порядку seed, группировку соседних строк одной таблицы и вида в changeset; проверка: тесты по сценариям «Перевод ссылок перед выводом строки», «Ссылки внутри одной таблицы», «Справочник без ссылок» и таблиц с циклом A → B → A без цикла строк
-- [ ] 1.3 Реализовать обнаружение конфликтов `unique` (новое значение набора совпадает с принятым значением другой изменяемой или удаляемой строки) с перечнем строк и набора; проверка: тесты по сценариям «Обмен значениями уникальности» и «Повторное использование значения удаляемой строки»
+- [x] 1.1 Реализовать в `src/forge/seeding/domain/` разницу принятого seed и seed попытки по PK в нормализованной форме: вставки, изменения только отличающихся колонок, удаления, очистка таблицы, убранной из seed; проверка: тесты `tests/seeding/domain/` по сценариям требований «Changelog данных строится из разницы seed» и «Таблица, убранная из seed, очищается», включая `"1.50"` против `"1.5"`
+- [x] 1.2 Реализовать порядок по `design.md`: вставки → изменения → удаления, топологический порядок строк по FK с разрешением равенств по порядку seed, группировку соседних строк одной таблицы и вида в changeset; проверка: тесты по сценариям «Перевод ссылок перед выводом строки», «Ссылки внутри одной таблицы», «Справочник без ссылок» и таблиц с циклом A → B → A без цикла строк
+- [x] 1.3 Реализовать обнаружение конфликтов `unique` (новое значение набора совпадает с принятым значением другой изменяемой или удаляемой строки) с перечнем строк и набора; проверка: тесты по сценариям «Обмен значениями уникальности» и «Повторное использование значения удаляемой строки»
 
 ## 2. Changelog данных
 
-- [ ] 2.1 Реализовать отрисовку changelog данных в `src/forge/seeding/infrastructure/`: действия `insert`/`update`/`delete` по строке, `where` на PK, литералы `valueComputed` с приведением типа и удвоением кавычек, `NULL`, явный `rollback` в обратном порядке, идентичность `<штамп>-NN`, `author: forge`, `logicalFilePath`; проверка: тест сверяет changelog фикстурного примера с эталонным файлом побайтово, повторная отрисовка совпадает
-- [ ] 2.2 Реализовать `GenerateSeedChangelogUseCase`: принятые модель и seed по умолчанию из корня принятого состояния, проверка обоих seed, отказ `unsupported`, перечень удалений и `drop_not_allowed` по `allow_drop` беклога операции через существующие контракты `migration/application`, удаление прежнего `--out` при отказе; проверка: тесты `tests/seeding/application/` на фейках по сценариям требований об источниках, удалениях и кодах
+- [x] 2.1 Реализовать отрисовку changelog данных в `src/forge/seeding/infrastructure/`: действия `insert`/`update`/`delete` по строке, `where` на PK, литералы `valueComputed` с приведением типа и удвоением кавычек, `NULL`, явный `rollback` в обратном порядке, идентичность `<штамп>-NN`, `author: forge`, `logicalFilePath`; проверка: тест сверяет changelog фикстурного примера с эталонным файлом побайтово, повторная отрисовка совпадает
+- [x] 2.2 Реализовать `GenerateSeedChangelogUseCase`: принятые модель и seed по умолчанию из корня принятого состояния, проверка обоих seed, отказ `unsupported`, перечень удалений и `drop_not_allowed` по `allow_drop` беклога операции через существующие контракты `migration/application`, удаление прежнего `--out` при отказе; проверка: тесты `tests/seeding/application/` на фейках по сценариям требований об источниках, удалениях и кодах
 
 ## 3. Команда CLI
 
-- [ ] 3.1 Добавить подкоманду `src/forge/cli/commands/generate_seed.py` и зарегистрировать её в `main.py`: ключи `--seed`, `--accepted-seed`, `--model`, `--operation`, `--out`, ответ с `changelog`, `logical_file_path`, changeset (`insert_rows`, `update_rows`, `delete_rows`, таблица, число строк), `deleted_rows`, `unsupported`, коды и виды ошибок `operation_unavailable`, `seed_unreadable`, `model_unreadable`, `accepted_model_invalid`, `accepted_seed_invalid`, `accepted_root_invalid`, `drop_not_allowed`; проверка: `tests/cli/test_generate_seed.py` по требованию «Коды возврата forge generate-seed»
+- [x] 3.1 Добавить подкоманду `src/forge/cli/commands/generate_seed.py` и зарегистрировать её в `main.py`: ключи `--seed`, `--accepted-seed`, `--model`, `--operation`, `--out`, ответ с `changelog`, `logical_file_path`, changeset (`insert_rows`, `update_rows`, `delete_rows`, таблица, число строк), `deleted_rows`, `unsupported`, коды и виды ошибок `operation_unavailable`, `seed_unreadable`, `model_unreadable`, `accepted_model_invalid`, `accepted_seed_invalid`, `accepted_root_invalid`, `drop_not_allowed`; проверка: `tests/cli/test_generate_seed.py` по требованию «Коды возврата forge generate-seed»
 
 ## 4. Откат данных
 
-- [ ] 4.1 Дополнить сводку `ChangelogSummary` и `_summary()` в `src/forge/migration/` перечнями строк из действий `insert`/`update`/`delete` и их `rollback`; сводка changelog модели не меняется; проверка: тесты `tests/migration/infrastructure/` на changelog данных и прежние тесты сводки зелёные без правок
-- [ ] 4.2 Добавить проверки возврата `row_absent`, `row_present`, `row_restored` запросом `count(*)` с `IS NOT DISTINCT FROM` по литералам из changelog и записать их в `rollback.json`; проверка: тесты `tests/migration/application/` по сценариям дельты `forge-migration`
+- [x] 4.1 Дополнить сводку `ChangelogSummary` и `_summary()` в `src/forge/migration/` перечнями строк из действий `insert`/`update`/`delete` и их `rollback`; сводка changelog модели не меняется; проверка: тесты `tests/migration/infrastructure/` на changelog данных и прежние тесты сводки зелёные без правок
+- [x] 4.2 Добавить проверки возврата `row_absent`, `row_present`, `row_restored` запросом `count(*)` с `IS NOT DISTINCT FROM` по литералам из changelog и записать их в `rollback.json`; проверка: тесты `tests/migration/application/` по сценариям дельты `forge-migration`
 
 ## 5. Интеграция с PostgreSQL
 
@@ -30,8 +30,8 @@
 
 ## 6. Документация
 
-- [ ] 6.1 Написать `docs/seed-migration.md` по DOC-014 и DOC-022: разница seed, порядок и его обоснование, группировка, литералы, откат, отказ `unsupported`, удаления и согласие, команда с таблицей кодов, ограничения и допущения (NUL, размер, пустая таблица при первом наполнении); проверка: тест документа сверяет пример changelog с эталонным файлом из 2.1
-- [ ] 6.2 Дополнить `docs/migration.md` разделами «Откат» и «Проверка возврата» строками `row_absent`, `row_present`, `row_restored` и ссылкой на `docs/seed-migration.md`; добавить `forge generate-seed` в таблицу команд `docs/architecture.md`; дописать строки `LBFR-028, OpenSpec change add-seed-migration` в конец таблиц версий (DOC-024); проверка: ссылки ведут на существующие разделы, новые строки последние
+- [x] 6.1 Написать `docs/seed-migration.md` по DOC-014 и DOC-022: разница seed, порядок и его обоснование, группировка, литералы, откат, отказ `unsupported`, удаления и согласие, команда с таблицей кодов, ограничения и допущения (NUL, размер, пустая таблица при первом наполнении); проверка: тест документа сверяет пример changelog с эталонным файлом из 2.1
+- [x] 6.2 Дополнить `docs/migration.md` разделами «Откат» и «Проверка возврата» строками `row_absent`, `row_present`, `row_restored` и ссылкой на `docs/seed-migration.md`; добавить `forge generate-seed` в таблицу команд `docs/architecture.md`; дописать строки `LBFR-028, OpenSpec change add-seed-migration` в конец таблиц версий (DOC-024); проверка: ссылки ведут на существующие разделы, новые строки последние
 
 ## 7. Проверка целиком
 

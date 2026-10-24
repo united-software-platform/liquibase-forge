@@ -18,7 +18,11 @@ import yaml
 from yaml.nodes import MappingNode, Node, ScalarNode, SequenceNode
 
 from forge.modeling.domain.violation import Violation, join_path
-from forge.seeding.application.seed_reading import SeedReading, SeedUnreadableError
+from forge.seeding.application.seed_reading import (
+    SeedNotFoundError,
+    SeedReading,
+    SeedUnreadableError,
+)
 from forge.seeding.domain.draft import RawValue, RowDraft, ScalarKind, SeedDraft, SeedTableDraft
 from forge.shared.infrastructure.yaml_nodes import (
     BOOL_TAG,
@@ -59,7 +63,7 @@ def _read_text(path: str) -> str:
     try:
         return Path(path).read_text(encoding="utf-8")
     except FileNotFoundError:
-        raise SeedUnreadableError(path, "файла нет") from None
+        raise SeedNotFoundError(path) from None
     except IsADirectoryError:
         raise SeedUnreadableError(path, "это каталог") from None
     except UnicodeDecodeError as error:

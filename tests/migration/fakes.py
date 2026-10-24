@@ -9,6 +9,7 @@ from typing import Any
 from forge.migration.application.changelog_storage import (
     ChangelogSummary,
     ChangelogUnreadableError,
+    RowRef,
 )
 from forge.migration.application.database import JournalEntry
 from forge.migration.application.liquibase_gateway import GatewayResult, GatewayUnavailableError
@@ -93,6 +94,7 @@ class FakeDatabase:
     rollback_code: int = 0
     master_exists: bool = False
     summary: ChangelogSummary | None = SUMMARY
+    row_counts: dict[RowRef, int] = field(default_factory=dict)
     calls: list[str] = field(default_factory=list)
 
     def apply_attempt(self, count: int) -> None:
@@ -116,6 +118,9 @@ class FakeDatabase:
 
     def constraint_exists(self, database: TargetDatabase, table: str, name: str, kind: str) -> bool:
         return (kind, table, name) in self.constraints
+
+    def count_rows(self, database: TargetDatabase, row: RowRef) -> int:
+        return self.row_counts.get(row, 0)
 
     def recreate(self, database: TargetDatabase) -> None:
         self.calls.append("recreate")

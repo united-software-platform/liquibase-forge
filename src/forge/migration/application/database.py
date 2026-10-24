@@ -1,10 +1,12 @@
-"""Контракты прямого доступа к целевой БД: журнал Liquibase, наличие объектов, пересоздание."""
+"""Контракты прямого доступа к целевой БД: журнал Liquibase, наличие объектов и строк,
+пересоздание."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Protocol
 
+from forge.migration.application.changelog_storage import RowRef
 from forge.shared.domain.target_database import TargetDatabase
 
 
@@ -33,6 +35,15 @@ class SchemaProbeInterface(Protocol):
 
     def constraint_exists(self, database: TargetDatabase, table: str, name: str, kind: str) -> bool:
         """Есть ли у таблицы ограничение с таким именем вида `foreign_key` или `unique`."""
+        ...
+
+
+class RowProbeInterface(Protocol):
+    """Число строк таблицы схемы `public` по условию из changelog данных."""
+
+    def count_rows(self, database: TargetDatabase, row: RowRef) -> int:
+        """`count(*)` строк по условию `where` строки, где каждая колонка из `values`
+        `IS NOT DISTINCT FROM` своего литерала; нет таблицы — `0`."""
         ...
 
 

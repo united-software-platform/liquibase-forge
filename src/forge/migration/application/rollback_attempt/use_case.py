@@ -10,11 +10,13 @@ from forge.migration.application.changelog_storage import (
     ChangelogSummary,
     ChangelogUnreadableError,
     ConstraintRef,
+    RowRef,
 )
 from forge.migration.application.database import (
     DatabaseRecreatorInterface,
     JournalEntry,
     JournalReaderInterface,
+    RowProbeInterface,
     SchemaProbeInterface,
 )
 from forge.migration.application.liquibase_gateway import GatewayResult, LiquibaseGatewayInterface
@@ -44,6 +46,7 @@ class RollbackDependencies:
     changelogs: ChangelogReaderInterface
     journal: JournalReaderInterface
     schema: SchemaProbeInterface
+    rows: RowProbeInterface
     recreator: DatabaseRecreatorInterface
     gateway: LiquibaseGatewayInterface
     writer: ResultWriterInterface
@@ -58,7 +61,8 @@ class RollbackAttemptUseCase:
     Откат Liquibase выполняется, только если записи попытки — хвост журнала и changelog
     попытки на месте. Иначе, как и при ошибке Liquibase, целевая БД пересоздаётся и получает
     принятый changelog `accepted_master` — `master.yaml` корня принятого состояния. Затем
-    проверяется возврат: добавленного changelog попытки в схеме нет, удалённое — снова есть.
+    проверяется возврат: добавленного changelog попытки в схеме нет, удалённое — снова есть;
+    у changelog данных вставленных строк нет, удалённые есть, изменённые имеют прежние значения.
     Итог пишется в `rollback.json` каталога попытки. Ошибки окружения — исключения контрактов.
     """
 
@@ -197,7 +201,23 @@ class RollbackAttemptUseCase:
             checks.append(
                 CheckView(f"{constraint.kind}_present", present, _constraint_detail(constraint))
             )
+        for row in summary.inserted_rows:
+            checks.append(self._row_check("row_absent", target, row, expected=0))
+        for row in summary.updated_rows:
+            checks.append(self._row_check("row_restored", target, row, expected=1))
+        for row in summary.deleted_rows:
+            checks.append(self._row_check("row_present", target, row, expected=1))
         return checks
+
+    def _row_check(
+        self, check: str, target: TargetDatabase, row: RowRef, expected: int
+    ) -> CheckView:
+        """Строка по условию на ключ и литералам отката: `0` — её нет, `1` — она на месте."""
+        found = self._deps.rows.count_rows(target, row)
+        detail = f"строка {row.table} WHERE {row.where}"
+        if row.values:
+            detail += " со значениями " + ", ".join(f"{c} = {v}" for c, v in row.values)
+        return CheckView(check, found == expected, f"{detail}: найдено {found}")
 
     def _constraint_exists(self, target: TargetDatabase, constraint: ConstraintRef) -> bool:
         return self._deps.schema.constraint_exists(

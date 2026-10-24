@@ -2,10 +2,18 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
+from forge.modeling.application.load_model.input import LoadModelInput
+from forge.modeling.application.load_model.use_case import LoadModelUseCase
 from forge.modeling.domain.data_model import DataModel
 from forge.modeling.domain.draft import ColumnDraft, DataModelDraft, ForeignKeyDraft, TableDraft
 from forge.modeling.domain.factory import DataModelFactory
+from forge.modeling.infrastructure.yaml_reader import YamlModelDraftReader
 from forge.seeding.domain.draft import RawValue, RowDraft, ScalarKind, SeedDraft, SeedTableDraft
+from forge.seeding.domain.factory import SeedFactory
+from forge.seeding.domain.seed import Seed
+from forge.seeding.infrastructure.yaml_reader import YamlSeedDraftReader
 
 
 def model(*tables: TableDraft) -> DataModel:
@@ -84,3 +92,22 @@ def seed(*tables: tuple[str, tuple[RowDraft, ...]], excluded: tuple[str, ...] = 
         tuple(SeedTableDraft(position, name, rows) for position, (name, rows) in enumerate(tables)),
         excluded,
     )
+
+
+MIGRATION_EXAMPLE = Path(__file__).resolve().parents[1] / "fixtures" / "seed" / "migration"
+"""Фикстурный пример changelog данных: модель, принятый seed, seed попытки и эталон."""
+
+EXAMPLE_STAMP = "20261025-101500"
+
+
+def migration_example() -> tuple[Seed, Seed]:
+    """Принятый seed и seed попытки фикстурного примера, проверенные по его модели."""
+    loaded = LoadModelUseCase(YamlModelDraftReader(), DataModelFactory()).execute(
+        LoadModelInput(str(MIGRATION_EXAMPLE / "model.yaml"))
+    )
+    reader = YamlSeedDraftReader()
+
+    def load(name: str) -> Seed:
+        return SeedFactory().create(loaded.model, reader.read(str(MIGRATION_EXAMPLE / name)).draft)
+
+    return load("accepted.yaml"), load("attempt.yaml")

@@ -1,9 +1,11 @@
-"""Прямой доступ к целевой БД через `psycopg`: журнал Liquibase, объекты схемы, пересоздание."""
+"""Прямой доступ к целевой БД через `psycopg`: журнал Liquibase, объекты схемы, строки
+данных, пересоздание."""
 
 from __future__ import annotations
 
 from psycopg import sql
 
+from forge.migration.application.changelog_storage import RowRef
 from forge.migration.application.database import JournalEntry
 from forge.shared.domain.target_database import TargetDatabase
 from forge.shared.infrastructure.postgres import PostgresConnector
@@ -68,6 +70,35 @@ class PsycopgSchemaProbe:
                 (table, name, _CONTYPES[kind]),
             ).fetchone()
         return row is not None
+
+
+class PsycopgRowProbe:
+    """Реализация подсчёта строк по условию и литералам changelog данных.
+
+    Условие и литералы — текст SQL из changelog попытки: тот же changelog исполняется в этой
+    БД целиком, поэтому они не новый источник доверия. Запрос выполняется без параметров,
+    и `%` в литерале не принимается за место подстановки.
+    """
+
+    def __init__(self, connector: PostgresConnector) -> None:
+        self._connector = connector
+
+    def count_rows(self, database: TargetDatabase, row: RowRef) -> int:
+        conditions = [sql.SQL("({})").format(sql.SQL(row.where))] + [
+            sql.SQL("{} IS NOT DISTINCT FROM {}").format(sql.Identifier(column), sql.SQL(value))
+            for column, value in row.values
+        ]
+        query = sql.SQL("SELECT count(*) FROM {} WHERE {}").format(
+            sql.Identifier("public", row.table), sql.SQL(" AND ").join(conditions)
+        )
+        with self._connector.connect(database) as connection:
+            exists = connection.execute(
+                "SELECT to_regclass(%s)", (f"public.{row.table}",)
+            ).fetchone()
+            if exists is None or exists[0] is None:
+                return 0
+            found = connection.execute(query).fetchone()
+        return 0 if found is None else int(found[0])
 
 
 class PsycopgDatabaseRecreator:

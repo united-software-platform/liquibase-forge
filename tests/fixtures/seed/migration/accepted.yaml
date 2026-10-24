@@ -1,0 +1,9 @@
+version: 1
+tables:
+  - name: status_group
+    rows:
+      - {code: active, title: Активные}
+  - name: order_status
+    rows:
+      - {code: draft, group_code: active, title: Черновик}
+      - {code: archived, group_code: active, title: Архив, fee: "0.00"}

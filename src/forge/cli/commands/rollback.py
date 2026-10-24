@@ -22,6 +22,7 @@ from forge.migration.infrastructure.operation_record_reader import (
 from forge.migration.infrastructure.postgres import (
     PsycopgDatabaseRecreator,
     PsycopgJournalReader,
+    PsycopgRowProbe,
     PsycopgSchemaProbe,
 )
 from forge.migration.infrastructure.runner_gateway import RunnerLiquibaseGateway
@@ -64,6 +65,7 @@ def build_use_case(accepted_master_path: str | None = None) -> RollbackAttemptUs
             changelogs=LiquibaseYamlChangelogReader(),
             journal=PsycopgJournalReader(connector),
             schema=PsycopgSchemaProbe(connector),
+            rows=PsycopgRowProbe(connector),
             recreator=PsycopgDatabaseRecreator(connector),
             gateway=RunnerLiquibaseGateway(Path.cwd(), runner_settings(os.environ)),
             writer=JsonResultWriter(),

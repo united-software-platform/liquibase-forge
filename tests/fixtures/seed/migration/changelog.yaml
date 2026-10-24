@@ -1,0 +1,106 @@
+# Changelog данных операции 20261025-101500: построен forge generate-seed, вручную не правится
+databaseChangeLog:
+- changeSet:
+    id: 20261025-101500-01
+    author: forge
+    logicalFilePath: db/changelog/20261025-101500.yaml
+    changes:
+    - insert:
+        tableName: status_group
+        columns:
+        - column:
+            name: code
+            valueComputed: "'closed'::VARCHAR(16)"
+        - column:
+            name: title
+            valueComputed: "'Закрытые'::TEXT"
+    rollback:
+    - delete:
+        tableName: status_group
+        where: "code = 'closed'::VARCHAR(16)"
+- changeSet:
+    id: 20261025-101500-02
+    author: forge
+    logicalFilePath: db/changelog/20261025-101500.yaml
+    changes:
+    - insert:
+        tableName: order_status
+        columns:
+        - column:
+            name: code
+            valueComputed: "'paid'::VARCHAR(32)"
+        - column:
+            name: group_code
+            valueComputed: "'closed'::VARCHAR(16)"
+        - column:
+            name: title
+            valueComputed: "'Оплачен'::TEXT"
+        - column:
+            name: fee
+            valueComputed: "'12.5'::NUMERIC(12, 2)"
+    - insert:
+        tableName: order_status
+        columns:
+        - column:
+            name: code
+            valueComputed: "'new'::VARCHAR(32)"
+        - column:
+            name: group_code
+            valueComputed: "'active'::VARCHAR(16)"
+        - column:
+            name: title
+            valueComputed: "'Новый'::TEXT"
+        - column:
+            name: fee
+            valueComputed: "NULL"
+    rollback:
+    - delete:
+        tableName: order_status
+        where: "code = 'new'::VARCHAR(32)"
+    - delete:
+        tableName: order_status
+        where: "code = 'paid'::VARCHAR(32)"
+- changeSet:
+    id: 20261025-101500-03
+    author: forge
+    logicalFilePath: db/changelog/20261025-101500.yaml
+    changes:
+    - update:
+        tableName: order_status
+        columns:
+        - column:
+            name: title
+            valueComputed: "'Набросок'::TEXT"
+        where: "code = 'draft'::VARCHAR(32)"
+    rollback:
+    - update:
+        tableName: order_status
+        columns:
+        - column:
+            name: title
+            valueComputed: "'Черновик'::TEXT"
+        where: "code = 'draft'::VARCHAR(32)"
+- changeSet:
+    id: 20261025-101500-04
+    author: forge
+    logicalFilePath: db/changelog/20261025-101500.yaml
+    changes:
+    - delete:
+        tableName: order_status
+        where: "code = 'archived'::VARCHAR(32)"
+    rollback:
+    - insert:
+        tableName: order_status
+        columns:
+        - column:
+            name: code
+            valueComputed: "'archived'::VARCHAR(32)"
+        - column:
+            name: group_code
+            valueComputed: "'active'::VARCHAR(16)"
+        - column:
+            name: title
+            valueComputed: "'Архив'::TEXT"
+        - column:
+            name: fee
+            valueComputed: "'0'::NUMERIC(12, 2)"
