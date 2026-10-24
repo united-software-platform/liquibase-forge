@@ -15,12 +15,15 @@ ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "tools" / "ci" / "integration-env.sh"
 ENV_EXAMPLE = ROOT / ".env.example"
 
-# docker: версия Compose из COMPOSE_VERSION, inspect — две сети контейнера, остальное — в журнал
+# docker: версия Compose из COMPOSE_VERSION, ps -q — идентификатор контейнера lbfr-db-test, inspect
+# по нему — две сети контейнера, остальное — в журнал
 DOCKER_STUB = """#!/bin/sh
 printf '%s\\n' "$*" >> "$STUB_DIR/docker-calls"
 case "$*" in
     "compose version --short") echo "${COMPOSE_VERSION:-2.29.1}" ;;
-    inspect*) printf "%s\\n" "x_default 172.18.0.5" "liquibase-forge_lbfr-net 172.19.0.3" ;;
+    "compose ps -q lbfr-db-test") echo 4a1f0c9e ;;
+    "inspect "*" 4a1f0c9e")
+        printf "%s\\n" "x_default 172.18.0.5" "liquibase-forge_lbfr-net 172.19.0.3" ;;
 esac
 exit 0
 """
@@ -102,6 +105,23 @@ def test_hosts_line_uses_lbfr_net_address(tmp_path: Path) -> None:
     _run(tmp_path)
 
     assert (tmp_path / "hosts").read_text() == "172.19.0.3 lbfr-db-test\n"
+
+
+def test_container_prefix_is_set_for_ci(tmp_path: Path) -> None:
+    result = _run(tmp_path)
+
+    assert result.returncode == 0, result.stderr
+    assert _pairs(tmp_path / "work" / ".env")["LBFR_CONTAINER_PREFIX"] == "lbfr-ci"
+
+
+def test_container_is_found_by_service(tmp_path: Path) -> None:
+    _run(tmp_path)
+
+    calls = (tmp_path / "docker-calls").read_text().splitlines()
+    assert "compose ps -q lbfr-db-test" in calls
+    inspect = [call for call in calls if call.startswith("inspect ")]
+    assert len(inspect) == 1
+    assert inspect[0].endswith(" 4a1f0c9e")
 
 
 def test_services_and_runner_are_started(tmp_path: Path) -> None:
