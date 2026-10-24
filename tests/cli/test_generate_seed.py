@@ -209,3 +209,53 @@ def test_invalid_accepted_root(
     code, payload = _generate(capsys)
 
     assert (code, payload["error"]["kind"]) == (2, "accepted_root_invalid")
+
+
+BY_TITLE = """version: 1
+tables:
+  - name: status
+    columns:
+      - {name: code, type: string, length: 32}
+      - {name: title, type: text, nullable: false}
+    primary_key: [code]
+    unique:
+      - [title]
+  - name: transition
+    columns:
+      - {name: code, type: string, length: 32}
+      - {name: status_title, type: text, nullable: false}
+    primary_key: [code]
+    foreign_keys:
+      - columns: [status_title]
+        references: {table: status, columns: [title]}
+"""
+
+
+def _by_title_seed(title: str) -> str:
+    return (
+        "version: 1\ntables:\n"
+        f"  - name: status\n    rows:\n      - {{code: open, title: {title}}}\n"
+        f"  - name: transition\n    rows:\n      - {{code: t1, status_title: {title}}}\n"
+    )
+
+
+def test_change_of_referenced_key_is_code_1(
+    project: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (project / "db" / "model.yaml").write_text(BY_TITLE, encoding="utf-8")
+    (project / "db" / "seed.yaml").write_text(_by_title_seed("Открыт"), encoding="utf-8")
+    (project / "seed.yaml").write_text(_by_title_seed("Открыт заказ"), encoding="utf-8")
+    (project / "attempt-1").mkdir()
+    (project / "attempt-1" / "changelog.yaml").write_text("устаревший", encoding="utf-8")
+
+    code, payload = _generate(capsys)
+
+    assert (code, payload["changelog"]) == (1, None)
+    (change,) = payload["unsupported"]
+    assert (change["code"], change["table"], change["columns"]) == (
+        "referenced_key_changed",
+        "status",
+        ["title"],
+    )
+    assert change["rows"] == ["status[code=open]", "transition[code=t1]"]
+    assert not (project / "attempt-1" / "changelog.yaml").exists()

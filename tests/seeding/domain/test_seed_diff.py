@@ -351,3 +351,138 @@ def test_integer_keys_are_compared_by_value() -> None:
     )
 
     assert _plan(groups) == [("insert", "level", ["level[id=2]"])]
+
+
+# Изменение ключа-набора, на который ведут ссылки
+
+STATUS_BY_TITLE = table(
+    "status",
+    CODE,
+    ColumnDraft("title", "text", nullable=False),
+    ColumnDraft("alias", "string", length=16),
+    ColumnDraft("note", "text"),
+    unique=(("title",), ("alias",)),
+)
+TRANSITION_BY_TITLE = table(
+    "transition",
+    CODE,
+    ColumnDraft("status_title", "text"),
+    ColumnDraft("status_alias", "string", length=16),
+    foreign_keys=(
+        reference(("status_title",), "status", ("title",)),
+        reference(("status_alias",), "status", ("alias",)),
+    ),
+)
+BY_TITLE = model(STATUS_BY_TITLE, TRANSITION_BY_TITLE)
+SLUGS = model(
+    table(
+        "node",
+        CODE,
+        ColumnDraft("slug", "string", length=16, nullable=False),
+        ColumnDraft("parent_slug", "string", length=16),
+        unique=(("slug",),),
+        foreign_keys=(reference(("parent_slug",), "node", ("slug",)),),
+    )
+)
+
+
+def _key_changes(
+    accepted: SeedDraft, attempt: SeedDraft, data_model: DataModel = BY_TITLE
+) -> list[tuple[str, tuple[str, ...], tuple[str, ...]]]:
+    with pytest.raises(UnsupportedRowChangeError) as error:
+        _diff(accepted, attempt, data_model)
+    return [(c.code, c.columns, c.rows) for c in error.value.changes]
+
+
+def test_change_of_referenced_old_value_is_unsupported() -> None:
+    accepted = seed(
+        ("status", (row(code=s("open"), title=s("Открыт")),)),
+        ("transition", (row(code=s("t1"), status_title=s("Открыт")),)),
+    )
+    attempt = seed(
+        ("status", (row(code=s("open"), title=s("Открыт заказ")),)),
+        ("transition", (row(code=s("t1"), status_title=s("Открыт заказ")),)),
+    )
+
+    assert _key_changes(accepted, attempt) == [
+        ("referenced_key_changed", ("title",), ("status[code=open]", "transition[code=t1]"))
+    ]
+
+
+def test_insert_referencing_new_value_is_unsupported() -> None:
+    accepted = seed(("status", (row(code=s("open"), title=s("Открыт")),)), ("transition", ()))
+    attempt = seed(
+        ("status", (row(code=s("open"), title=s("Закрыт")),)),
+        ("transition", (row(code=s("t2"), status_title=s("Закрыт")),)),
+    )
+
+    assert _key_changes(accepted, attempt) == [
+        ("referenced_key_changed", ("title",), ("status[code=open]", "transition[code=t2]"))
+    ]
+
+
+def test_reference_by_primary_key_is_not_rejected() -> None:
+    accepted = seed(
+        ("status", (row(code=s("open")),)),
+        ("transition", (row(code=s("t1"), status_code=s("open")),)),
+    )
+    attempt = seed(
+        ("status", (row(code=s("open")),)),
+        ("transition", (row(code=s("t1"), status_code=s("open")),)),
+    )
+    status_title = model(
+        table("status", CODE, ColumnDraft("title", "text"), unique=(("title",),)),
+        TRANSITION,
+    )
+    renamed = seed(
+        ("status", (row(code=s("open"), title=s("Новое")),)),
+        ("transition", (row(code=s("t1"), status_code=s("open")),)),
+    )
+
+    assert _diff(accepted, attempt, status_title) == ()
+    assert _plan(_diff(accepted, renamed, status_title)) == [
+        ("update", "status", ["status[code=open]"])
+    ]
+
+
+def test_unreferenced_key_change_and_other_columns_are_not_rejected() -> None:
+    accepted = seed(
+        ("status", (row(code=s("open"), title=s("Открыт")), row(code=s("done"), title=s("Готов")))),
+        ("transition", (row(code=s("t1"), status_title=s("Открыт")),)),
+    )
+    attempt = seed(
+        (
+            "status",
+            (
+                row(code=s("open"), title=s("Открыт"), note=s("заметка")),
+                row(code=s("done"), title=s("Выполнен")),
+            ),
+        ),
+        ("transition", (row(code=s("t1"), status_title=s("Открыт")),)),
+    )
+
+    assert _plan(_diff(accepted, attempt, BY_TITLE)) == [
+        ("update", "status", ["status[code=open]", "status[code=done]"])
+    ]
+
+
+def test_null_key_values_are_not_references() -> None:
+    accepted = seed(
+        ("status", (row(code=s("open"), title=s("Открыт")),)),
+        ("transition", (row(code=s("t1"), status_title=NULL),)),
+    )
+    attempt = seed(
+        ("status", (row(code=s("open"), title=s("Открыт"), alias=s("o")),)),
+        ("transition", (row(code=s("t1"), status_title=NULL, status_alias=NULL),)),
+    )
+
+    assert _plan(_diff(accepted, attempt, BY_TITLE)) == [
+        ("update", "status", ["status[code=open]"])
+    ]
+
+
+def test_self_reference_through_changed_key_is_not_rejected() -> None:
+    accepted = seed(("node", (row(code=s("root"), slug=s("a"), parent_slug=s("a")),)))
+    attempt = seed(("node", (row(code=s("root"), slug=s("b"), parent_slug=s("b")),)))
+
+    assert _plan(_diff(accepted, attempt, SLUGS)) == [("update", "node", ["node[code=root]"])]

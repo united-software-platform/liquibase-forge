@@ -7,6 +7,7 @@ from collections.abc import Sequence
 
 from forge.modeling.domain.foreign_key import ForeignKey
 from forge.modeling.domain.identifier import ColumnName, TableName
+from forge.modeling.domain.table import Table
 from forge.seeding.domain.row_changes import (
     RowChange,
     RowDelete,
@@ -39,9 +40,14 @@ class SeedDiff:
     и строк в seed: для удалений — в принятом, для вставок и изменений — в seed попытки.
     Соседние строки одной таблицы и одного вида собираются в группу — будущий changeset.
 
-    Новое значение набора `unique`, совпадающее с принятым значением другой изменяемой или
-    удаляемой строки, — неисполнимое изменение: такие изменения собираются все и бросаются
-    одним исключением.
+    Неисполнимые изменения собираются все и бросаются одним исключением:
+
+    - новое значение набора `unique` совпадает с принятым значением другой изменяемой или
+      удаляемой строки;
+    - изменяемая строка меняет значение набора `unique`, на который ведёт внешний ключ, а на
+      прежнее значение ссылается другая строка принятого seed либо новое занимает другая
+      вставляемая или изменяемая строка. Ссылки по набору не следуют за его значением, поэтому
+      ни один порядок такие изменения не исполнит.
     """
 
     def between(self, accepted: Seed, attempt: Seed) -> tuple[RowGroup, ...]:
@@ -63,6 +69,9 @@ class SeedDiff:
                     deletes[index, position] = RowDelete(seed_table.table, row)
 
         conflicts = _unique_conflicts([*inserts.values(), *updates.values()], updates, deletes)
+        conflicts += _referenced_key_changes(
+            accepted, [*inserts.values(), *updates.values()], updates
+        )
         if conflicts:
             raise UnsupportedRowChangeError(conflicts)
 
@@ -174,6 +183,84 @@ def _unique_conflicts(
                 seen.add(mark)
                 conflicts.append(_conflict(change, other, unique.columns, taker, giver))
     return conflicts
+
+
+def _referenced_key_changes(
+    accepted: Seed, taking: Sequence[RowChange], updates: dict[Node, RowChange]
+) -> list[UnsupportedRowChange]:
+    """Изменения значения набора `unique`, на который ведёт внешний ключ, при ссылках на
+    прежнее значение из принятого seed или на новое — из вставляемых и изменяемых строк.
+
+    Ссылка строки на себя и значения с NULL не учитываются; ключи на PK не рассматриваются:
+    смена PK — удаление и вставка. Пара строк и внешний ключ называются один раз.
+    """
+    conflicts: list[UnsupportedRowChange] = []
+    seen: set[tuple[str, ForeignKey, frozenset[str]]] = set()
+    for change in updates.values():
+        assert isinstance(change, RowUpdate)
+        table = change.table
+        for source, key in _keys_to(accepted, taking, table.name):
+            if frozenset(key.target_columns) == frozenset(table.primary_key.columns):
+                continue
+            old, new = change.before.key(key.target_columns), change.after.key(key.target_columns)
+            if old == new:
+                continue
+            label = row_label(table, change.after)
+            referencing = [
+                row_label(source, row)
+                for row in _rows_of(accepted, source.name)
+                if _references(row, key, old)
+            ] + [
+                row_label(other.table, _row(other))
+                for other in taking
+                if other.table == source and _references(_row(other), key, new)
+            ]
+            for other_label in referencing:
+                mark = (table.name.value, key, frozenset((label, other_label)))
+                if other_label == label or mark in seen:
+                    continue
+                seen.add(mark)
+                conflicts.append(_key_change(table, source, key, label, other_label))
+    return conflicts
+
+
+def _keys_to(
+    accepted: Seed, taking: Sequence[RowChange], target: TableName
+) -> list[tuple[Table, ForeignKey]]:
+    """Внешние ключи таблиц обоих seed, ведущие на таблицу `target`, без повторов."""
+    tables = [seed_table.table for seed_table in accepted.tables]
+    tables += [change.table for change in taking if change.table not in tables]
+    found: list[tuple[Table, ForeignKey]] = []
+    for table in tables:
+        for key in table.foreign_keys:
+            if key.target == target and (table, key) not in found:
+                found.append((table, key))
+    return found
+
+
+def _rows_of(seed: Seed, name: TableName) -> tuple[SeedRow, ...]:
+    return seed.table(name).rows if seed.has_table(name) else ()
+
+
+def _references(row: SeedRow, key: ForeignKey, values: Key) -> bool:
+    own = row.key(key.columns)
+    return not any(value.is_null() for value in own) and own == values
+
+
+def _key_change(
+    table: Table, source: Table, key: ForeignKey, label: str, other: str
+) -> UnsupportedRowChange:
+    listed = ", ".join(column.value for column in key.target_columns)
+    return UnsupportedRowChange(
+        "referenced_key_changed",
+        table.name.value,
+        tuple(column.value for column in key.target_columns),
+        (label, other),
+        f"строка {label} меняет значение [{listed}], на которое ведёт внешний ключ {key} "
+        f"таблицы {source.name}, а строка {other} ссылается на прежнее или новое значение: "
+        "ссылки по набору unique не исполнить ни в каком порядке; разнесите изменение "
+        "значения и ссылок на него по двум операциям",
+    )
 
 
 def _row(change: RowChange) -> SeedRow:
