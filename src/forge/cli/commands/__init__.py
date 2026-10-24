@@ -19,10 +19,12 @@ from forge.cli.commands import (
     status,
     stop,
     validate,
+    validate_seed,
 )
 
 COMMANDS = (
     validate,
+    validate_seed,
     generate,
     apply,
     reconcile,

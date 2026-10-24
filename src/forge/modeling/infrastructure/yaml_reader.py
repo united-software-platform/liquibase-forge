@@ -1,7 +1,6 @@
 """Чтение файла модели данных в YAML и проверка его структуры.
 
-Стандартный `safe_load` молча берёт последнее значение повторного ключа, поэтому разборщик
-получает дерево узлов загрузчиком `SafeLoader` и обходит его сам: так он видит повторы
+Дерево узлов обходится общими помощниками `yaml_nodes`: так разборщик видит повторные ключи
 и знает логический путь каждого значения (`tables[0].columns[1].length`).
 
 Здесь проверяется только вид значений и состав полей. Смысл — имена, типы, первичный
@@ -13,7 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import yaml
-from yaml.nodes import MappingNode, Node, ScalarNode, SequenceNode
+from yaml.nodes import Node, ScalarNode, SequenceNode
 
 from forge.modeling.application.model_reading import (
     DraftReading,
@@ -23,19 +22,16 @@ from forge.modeling.application.model_reading import (
 from forge.modeling.domain.data_model import FORMAT_VERSION
 from forge.modeling.domain.draft import ColumnDraft, DataModelDraft, ForeignKeyDraft, TableDraft
 from forge.modeling.domain.violation import Violation, join_path
-
-_STR = "tag:yaml.org,2002:str"
-_INT = "tag:yaml.org,2002:int"
-_BOOL = "tag:yaml.org,2002:bool"
-
-_KIND_NAMES = {
-    _STR: "строка",
-    _INT: "целое число",
-    _BOOL: "логическое значение",
-    "tag:yaml.org,2002:float": "дробное число",
-    "tag:yaml.org,2002:null": "пустое значение",
-    "tag:yaml.org,2002:timestamp": "дата",
-}
+from forge.shared.infrastructure.yaml_nodes import (
+    BOOL_TAG,
+    YamlSyntaxError,
+    describe,
+    integer_value,
+    load_single_node,
+    mapping_fields,
+    string_value,
+    wrong_kind_message,
+)
 
 _ROOT_FIELDS = ("version", "tables")
 _TABLE_REQUIRED = ("name", "columns", "primary_key")
@@ -71,11 +67,9 @@ def parse_model(text: str) -> DraftReading:
     loader = yaml.SafeLoader(text)
     try:
         try:
-            root = loader.get_single_node()
-        except yaml.MarkedYAMLError as error:
-            return _rejected(Violation("", "yaml_syntax", _syntax_message(error)))
-        except yaml.YAMLError as error:
-            return _rejected(Violation("", "yaml_syntax", f"файл не разбирается как YAML: {error}"))
+            root = load_single_node(loader)
+        except YamlSyntaxError as error:
+            return _rejected(Violation("", "yaml_syntax", str(error)))
         return _Walker(loader).model(root)
     finally:
         loader.dispose()
@@ -83,15 +77,6 @@ def parse_model(text: str) -> DraftReading:
 
 def _rejected(violation: Violation) -> DraftReading:
     return DraftReading(DataModelDraft(()), (violation,))
-
-
-def _syntax_message(error: yaml.MarkedYAMLError) -> str:
-    mark = error.problem_mark
-    problem = error.problem or "ошибка синтаксиса"
-    if mark is None:
-        return f"файл не разбирается как YAML: {problem}"
-    position = f"строка {mark.line + 1}, столбец {mark.column + 1}"
-    return f"файл не разбирается как YAML: {position}: {problem}"
 
 
 class _Walker:
@@ -130,12 +115,12 @@ class _Walker:
     def _version(self, node: Node | None) -> bool:
         if node is None:
             return False
-        if node.tag == _INT and self._integer(node) == FORMAT_VERSION:
+        if integer_value(self._loader, node) == FORMAT_VERSION:
             return True
         self._add(
             "version",
             "unsupported_version",
-            f"поддерживается только version: {FORMAT_VERSION}, получено {_describe(node)}",
+            f"поддерживается только version: {FORMAT_VERSION}, получено {describe(node)}",
         )
         return False
 
@@ -257,45 +242,25 @@ class _Walker:
         self, node: Node, path: str, required: tuple[str, ...], optional: tuple[str, ...]
     ) -> dict[str, Node] | None:
         """Первое вхождение каждого поля; неизвестные, повторные и отсутствующие — нарушения."""
-        if not isinstance(node, MappingNode):
-            self._wrong_kind(node, path, "отображение с полями " + ", ".join(required))
-            return None
-        allowed = required + optional
-        nodes: dict[str, Node] = {}
-        for key_node, value_node in node.value:
-            key = key_node.value if isinstance(key_node, ScalarNode) else "?"
-            key_path = join_path(path, key)
-            if key in nodes:
-                self._add(
-                    key_path, "duplicate_key", f"ключ {key} повторён, значения не объединяются"
-                )
-            elif key not in allowed or key_node.tag != _STR:
-                self._add(
-                    key_path,
-                    "unknown_field",
-                    f"поле {key} не входит в формат, допустимы: {', '.join(allowed)}",
-                )
-            else:
-                nodes[key] = value_node
-        for field in required:
-            if field not in nodes:
-                self._add(
-                    join_path(path, field), "missing_field", f"нет обязательного поля {field}"
-                )
-        return nodes
+        return mapping_fields(
+            node,
+            required,
+            optional,
+            lambda key, code, message: self._add(join_path(path, key), code, message),
+        )
 
     def _string(self, node: Node | None, path: str) -> str | None:
         if node is None:
             return None
-        if node.tag == _STR and isinstance(node, ScalarNode):
-            return str(node.value)
-        self._wrong_kind(node, path, "строка")
-        return None
+        value = string_value(node)
+        if value is None:
+            self._wrong_kind(node, path, "строка")
+        return value
 
     def _optional_bool(self, node: Node | None, path: str) -> bool | None:
         if node is None:
             return None
-        if node.tag == _BOOL and isinstance(node, ScalarNode):
+        if node.tag == BOOL_TAG and isinstance(node, ScalarNode):
             return bool(self._loader.construct_object(node))
         self._wrong_kind(node, path, "логическое значение true или false")
         return None
@@ -303,32 +268,13 @@ class _Walker:
     def _optional_int(self, node: Node | None, path: str) -> int | None:
         if node is None:
             return None
-        value = self._integer(node) if node.tag == _INT else None
+        value = integer_value(self._loader, node)
         if value is None:
             self._wrong_kind(node, path, "целое число")
         return value
 
-    def _integer(self, node: Node) -> int | None:
-        try:
-            value = self._loader.construct_object(node)
-        except (yaml.YAMLError, ValueError):
-            return None
-        return value if isinstance(value, int) and not isinstance(value, bool) else None
-
     def _wrong_kind(self, node: Node, path: str, expected: str) -> None:
-        message = f"ожидалось: {expected}; получено: {_describe(node)}"
-        if expected == "строка" and node.tag != _STR and isinstance(node, ScalarNode):
-            message += f"; чтобы {node.value!r} читалось как строка, возьмите его в кавычки"
-        self._add(path, "wrong_kind", message)
+        self._add(path, "wrong_kind", wrong_kind_message(node, expected))
 
     def _add(self, path: str, code: str, message: str) -> None:
         self._violations.append(Violation(path, code, message))
-
-
-def _describe(node: Node) -> str:
-    if isinstance(node, MappingNode):
-        return "отображение"
-    if isinstance(node, SequenceNode):
-        return "список"
-    kind = _KIND_NAMES.get(node.tag, f"значение с тегом {node.tag}")
-    return f"{kind} {node.value!r}"

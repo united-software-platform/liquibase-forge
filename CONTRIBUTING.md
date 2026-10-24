@@ -48,7 +48,7 @@
 |-----|-----|
 | Номер версии — носитель бейджа версии, источник версии пакета и манифеста установки | `VERSION` |
 | Текст лицензии | `LICENSE` |
-| Справочник операции, миграций, сверки и формата модели | `docs/operation.md`, `docs/migration.md`, `docs/reconciliation.md`, `docs/model-format.md` |
+| Справочник операции, миграций, сверки, формата модели и формата seed | `docs/operation.md`, `docs/migration.md`, `docs/reconciliation.md`, `docs/model-format.md`, `docs/seed-format.md` |
 | Документ кейсов | `docs/use-cases.md` |
 | Спецификации и изменения OpenSpec | `openspec/` |
 | Правила репозитория | `rules/`, `CLAUDE.md`, `AGENTS.md` |
@@ -264,3 +264,4 @@ sh tools/make-lint/check.sh   # объём секций Makefile
 | 1.0.5 | 2026-10-23 | LBFR-020, OpenSpec change `protect-main-branch` | Claude Code | Claude Opus 5.5 | В «Выпуск версии» добавлен подраздел «Защита main»: ruleset из `.github/rulesets/main.json` с обходом только у ключа развёртывания, команда применения `tools/github/apply-ruleset.sh` с таблицей кодов возврата, команды заведения и замены ключа, выход при неработающем Actions через перевод ruleset'а в `disabled`. Предусловие о праве push `github-actions[bot]` заменено предусловием о ключе `release` и секрете `RELEASE_DEPLOY_KEY`; публикация коммита и тега описана через ключ, релиза — через `GITHUB_TOKEN`. В «Проверки» оговорка о необязательности `checks` заменена ссылкой на защиту `main`. В «Устройство репозитория» добавлены `.github/rulesets/` и `tools/github/` |
 | 1.0.6 | 2026-10-23 | LBFR-019, OpenSpec change `run-integration-tests-in-ci` | Claude Code | Claude Opus 5.5 | В «Проверки» оговорка об отсутствии окружения интеграционных тестов в CI заменена описанием окружения, которое поднимает `tools/ci/integration-env.sh`, признака `FORGE_REQUIRE_INTEGRATION` и журналов при сбое; в CI пропускаются только тесты CLI `backlog`. Из «Выпуск версии» удалено предусловие о том, что проверки сценария не исполняют тесты с окружением. В «Устройство репозитория» добавлен `tools/ci/` |
 | 1.0.7 | 2026-10-23 | LBFR-027, OpenSpec change `fix-runner-block-insertion` | Claude Code | Claude Opus 5.5 | В разделе «Отличия от поставки kit'а» строка `runner.py` описывает новую форму блока — оператор за присваиванием `ALLOWED_TARGETS`, работающий с однострочным и многострочным множеством и со словарём `TARGET_VARIABLES`, — и ограничение: словарь, объявленный после `ALLOWED_TARGETS`, блок не видит |
+| 1.0.8 | 2026-10-24 | LBFR-028, OpenSpec change `add-seed-format` | Claude Code | Claude Opus 5.5 | В таблицу «Документы и носители значений» раздела «Устройство репозитория» добавлен справочник формата seed `docs/seed-format.md` |

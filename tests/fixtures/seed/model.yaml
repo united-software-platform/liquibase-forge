@@ -1,0 +1,62 @@
+version: 1
+tables:
+  - name: status_group
+    columns:
+      - name: code
+        type: string
+        length: 16
+      - name: title
+        type: text
+        nullable: false
+    primary_key: [code]
+  - name: order_status
+    columns:
+      - name: code
+        type: string
+        length: 32
+      - name: group_code
+        type: string
+        length: 16
+        nullable: false
+      - name: title
+        type: text
+        nullable: false
+      - name: sort_order
+        type: integer
+        nullable: false
+      - name: is_final
+        type: boolean
+        nullable: false
+      - name: fee
+        type: decimal
+        precision: 12
+        scale: 2
+      - name: valid_from
+        type: timestamp_tz
+      - name: starts_on
+        type: date
+      - name: external_id
+        type: uuid
+      - name: description
+        type: text
+    primary_key: [code]
+    unique:
+      - [title]
+    foreign_keys:
+      - columns: [group_code]
+        references: {table: status_group, columns: [code]}
+  - name: category
+    columns:
+      - name: code
+        type: string
+        length: 32
+      - name: parent_code
+        type: string
+        length: 32
+      - name: title
+        type: text
+        nullable: false
+    primary_key: [code]
+    foreign_keys:
+      - columns: [parent_code]
+        references: {table: category, columns: [code]}
