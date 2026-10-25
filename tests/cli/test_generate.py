@@ -350,3 +350,33 @@ def test_foreign_key_drop_in_auto_without_consent(
     assert [c["kind"] for c in payload["changesets"]] == ["drop_foreign_key"]
     (entry,) = yaml.safe_load(out.read_text(encoding="utf-8"))["databaseChangeLog"]
     assert "addForeignKeyConstraint" in entry["changeSet"]["rollback"][0]
+
+
+def test_dropping_seeded_table_is_seed_conflict(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    (tmp_path / "seed.yaml").write_text(
+        "version: 1\ntables:\n  - name: invoice\n    rows:\n      - {number: 1}\n",
+        encoding="utf-8",
+    )
+    out = tmp_path / "attempt-1" / "changelog.yaml"
+    out.parent.mkdir()
+    out.write_text("# прежний changelog\n", encoding="utf-8")
+
+    code, payload, _ = _generate(
+        tmp_path, capsys, CUSTOMER, accepted=CUSTOMER + INVOICE, allow_drop=True
+    )
+
+    assert (code, payload["changelog"]) == (1, None)
+    assert [(c["kind"], c["table"], c["column"]) for c in payload["seed_conflict"]] == [
+        ("seeded_table_dropped", "invoice", None)
+    ]
+    assert not out.exists()
+
+
+def test_generate_without_accepted_seed_has_empty_conflicts(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    code, payload, _ = _generate(tmp_path, capsys, CUSTOMER)
+
+    assert (code, payload["seed_conflict"]) == (0, [])

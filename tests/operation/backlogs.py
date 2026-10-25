@@ -63,6 +63,22 @@ def legacy(root: Path, stamp: str = STAMP) -> Path:
     return path
 
 
+def seed(root: Path, stamp: str = STAMP) -> Path:
+    """Беклог операции seed в корне следа `root`: фронтматтер 1.0.0 с `kind: seed`."""
+    path = root / "forge-seed" / stamp / "tasks.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    text = LEGACY.read_text(encoding="utf-8").replace("20261017-153000", stamp)
+    text = text.replace("operation: forge-model\n", "operation: forge-seed\nkind: seed\n", 1)
+    path.write_text(text.replace('intent: "Справочник', 'intent: "Статусы заказа', 1))
+    return path
+
+
+KINDS = {"model": legacy, "seed": seed}
+"""Беклог операции каждого вида по фронтматтеру 1.0.0: для тестов, параметризованных по виду."""
+ATTEMPT_TRAILS = {"model": "forge-apply", "seed": "forge-seed-apply"}
+"""Каталог следа беклогов попыток каждого вида."""
+
+
 def set_values(path: Path, **values: str) -> None:
     """Заменить значения верхнего уровня и попыток фронтматтера, как это делает исполнение."""
     text = path.read_text(encoding="utf-8")

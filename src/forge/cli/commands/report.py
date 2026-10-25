@@ -12,6 +12,7 @@ from forge.cli.commands.operation_support import (
     read_repository,
 )
 from forge.cli.contract import ExitCode, emit, environment_error
+from forge.operation.application.accepted_state import DeletedRow, DestructiveChange
 from forge.operation.application.build_report.input import BuildReportInput
 from forge.operation.application.build_report.output import BuildReportOutput
 from forge.operation.application.build_report.use_case import (
@@ -74,6 +75,7 @@ def report_payload(output: BuildReportOutput) -> dict[str, Any]:
     return {
         "operation": operation_payload(output.operation),
         "model": output.model,
+        "seed": output.seed,
         "changelog": output.changelog,
         "attempts": [
             {
@@ -82,6 +84,7 @@ def report_payload(output: BuildReportOutput) -> dict[str, Any]:
                 "backlog": a.backlog,
                 "directory": a.directory,
                 "model": a.model,
+                "seed": a.seed,
                 "changelog": a.changelog,
                 "reconcile": asdict(a.reconcile) if a.reconcile else None,
                 "rollback": asdict(a.rollback) if a.rollback else None,
@@ -90,7 +93,8 @@ def report_payload(output: BuildReportOutput) -> dict[str, Any]:
         ],
         "backlogs": list(output.backlogs),
         "accepted": asdict(accepted) if accepted else None,
-        "destructive": [asdict(change) for change in output.destructive],
+        "rows": [asdict(counts) for counts in output.rows],
+        "destructive": [_destructive(change) for change in output.destructive],
         "commit": (
             {
                 "files": list(output.commit_files),
@@ -100,3 +104,10 @@ def report_payload(output: BuildReportOutput) -> dict[str, Any]:
             else None
         ),
     }
+
+
+def _destructive(change: DestructiveChange | DeletedRow) -> dict[str, Any]:
+    """Удаление в отчёте: таблица и колонка — у модели, таблица и первичный ключ строки — у seed."""
+    if isinstance(change, DeletedRow):
+        return {"table": change.table, "key": dict(change.key)}
+    return asdict(change)

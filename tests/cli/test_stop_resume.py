@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -72,6 +73,43 @@ def test_closed_operation_is_not_changed(
     tmp_path: Path, capsys: pytest.CaptureFixture[str], command: list[str]
 ) -> None:
     path = generate(tmp_path)
+    set_values(path, status="success", verdict__attempt_1="success")
+    before = path.read_bytes()
+
+    code, payload = _run(capsys, command[0], "--operation", str(path), *command[1:])
+
+    assert code == 1 and "закрыта" in payload["refused"]
+    assert path.read_bytes() == before
+
+
+def test_stop_and_resume_by_kind(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], kind: str, backlog: Callable[..., Path]
+) -> None:
+    path = backlog(tmp_path)
+
+    code, payload = _run(capsys, "stop", "--operation", str(path), "--reason", "отказ владельца")
+
+    assert (code, payload["operation"]["kind"], payload["operation"]["status"]) == (
+        0,
+        kind,
+        "stopped",
+    )
+    code, payload = _run(capsys, "resume", "--operation", str(path))
+    assert (code, payload["operation"]["kind"], payload["operation"]["status"]) == (
+        0,
+        kind,
+        "running",
+    )
+
+
+@pytest.mark.parametrize("command", [["stop", "--reason", "x"], ["resume"]])
+def test_closed_operation_of_any_kind_is_not_changed(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    backlog: Callable[..., Path],
+    command: list[str],
+) -> None:
+    path = backlog(tmp_path)
     set_values(path, status="success", verdict__attempt_1="success")
     before = path.read_bytes()
 

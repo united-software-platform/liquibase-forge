@@ -12,6 +12,13 @@ SUCCESS = "success"
 FAILURE = "failure"
 
 
+class OperationKind(StrEnum):
+    """Вид операции: `model` строит модель данных, `seed` наполняет справочные таблицы."""
+
+    MODEL = "model"
+    SEED = "seed"
+
+
 class OperationStatus(StrEnum):
     """Статус операции: открыта (`running`, `stopped`) либо закрыта (`success`, `failure`,
     `abandoned` — брошена владельцем, ничего не принято)."""
@@ -92,11 +99,12 @@ class AbandonOutcome:
 
 
 class Operation:
-    """Операция: намерение, режим, согласие на удаления, статус, причина остановки и попытки.
+    """Операция: вид, намерение, режим, согласие на удаления, статус, причина остановки и попытки.
 
     Статус меняют только операции агрегата: `stop`, `resume`, `close`, `abandon`. Вердикты попыток
     записывает исполнение беклога, агрегат их только читает. Согласие `allow_drop` задаётся
     при начале операции либо даётся остановленной операции в режиме `auto` и не снимается.
+    `seed_adjusted` — закрытие операции модели убрало удалённые колонки из принятого seed.
     """
 
     def __init__(
@@ -109,8 +117,12 @@ class Operation:
         stop_reason: str | None,
         attempts: tuple[Attempt, ...],
         allow_drop: bool = False,
+        kind: OperationKind = OperationKind.MODEL,
+        seed_adjusted: bool = False,
     ) -> None:
         self.path = path
+        self.kind = kind
+        self.seed_adjusted = seed_adjusted
         self.stamp = stamp
         self.intent = intent
         self.mode = mode
@@ -201,6 +213,14 @@ class Operation:
             else f"подтверждённой попытки нет, неуспешных попыток {len(failed)} из {ATTEMPT_LIMIT}"
         )
         raise OperationNotClosableError(f"закрывать рано: {reason}")
+
+    def adjust_seed(self) -> None:
+        """Отметить, что закрытие с `success` согласовало принятый seed с принятой моделью."""
+        if self.kind is not OperationKind.MODEL or self._status is not OperationStatus.SUCCESS:
+            raise OperationTransitionError(
+                "принятый seed согласует только закрытие операции модели с success"
+            )
+        self.seed_adjusted = True
 
     def abandon(self, reason: str, rollbacks: Mapping[int, bool]) -> AbandonOutcome:
         """Бросить открытую операцию по решению владельца; причина пишется в `stop_reason`.

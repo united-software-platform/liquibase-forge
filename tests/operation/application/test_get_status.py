@@ -15,7 +15,7 @@ from forge.operation.application.operation_reading import (
 )
 from forge.operation.domain.factory import OperationFactory
 from forge.operation.infrastructure.frontmatter import FrontmatterOperationReadRepository
-from tests.operation.backlogs import legacy, set_values
+from tests.operation.backlogs import legacy, seed, set_values
 from tests.operation.fakes import FakeProbe
 
 
@@ -74,6 +74,36 @@ def test_latest_finds_stopped_operation(tmp_path: Path) -> None:
 
     assert output.operation is not None
     assert (output.operation.path, output.operation.status) == (stopped.as_posix(), "stopped")
+
+
+def test_latest_finds_open_seed_operation(tmp_path: Path) -> None:
+    set_values(legacy(tmp_path, "20261017-150000"), status="success")
+    running = seed(tmp_path, "20261017-160000")
+
+    output = _status(tmp_path, None)
+
+    assert output.operation is not None
+    assert (output.operation.path, output.operation.status, output.operation.kind) == (
+        running.as_posix(),
+        "running",
+        "seed",
+    )
+
+
+def test_open_operations_of_both_kinds(tmp_path: Path) -> None:
+    model = legacy(tmp_path, "20261017-150000")
+    filled = seed(tmp_path, "20261017-160000")
+
+    with pytest.raises(SeveralOpenOperationsError) as raised:
+        _status(tmp_path, None)
+
+    assert raised.value.paths == (model.as_posix(), filled.as_posix())
+
+
+def test_legacy_backlog_status_names_model(tmp_path: Path) -> None:
+    output = _status(tmp_path, str(legacy(tmp_path)))
+
+    assert output.operation is not None and output.operation.kind == "model"
 
 
 def test_several_open_operations(tmp_path: Path) -> None:

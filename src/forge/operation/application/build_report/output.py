@@ -6,34 +6,42 @@ from dataclasses import dataclass
 
 from forge.operation.application.accepted_state import (
     AcceptedFiles,
+    DeletedRow,
     DestructiveChange,
     ReconcileSummary,
     RollbackSummary,
+    TableRowCounts,
 )
 from forge.operation.application.views import OperationView
 
 
 @dataclass(frozen=True)
 class AttemptReport:
-    """Попытка в отчёте: вердикт, артефакты, итоги сверки и отката."""
+    """Попытка в отчёте: вердикт, артефакты, итоги сверки и отката.
+
+    Главный артефакт попытки — `model` у операции модели и `seed` у операции seed; другой — `None`.
+    """
 
     number: int
     verdict: str | None
     backlog: str | None
     directory: str
-    model: str
+    model: str | None
     changelog: str
     reconcile: ReconcileSummary | None
     rollback: RollbackSummary | None
+    seed: str | None = None
 
 
 @dataclass(frozen=True)
 class BuildReportOutput:
-    """Отчёт: операция, итоговые модель и changelog, попытки, беклоги, файлы для коммита.
+    """Отчёт: операция, итоговые модель или seed и changelog, попытки, беклоги, файлы для коммита.
 
     `commit_files` — `None` у открытой операции; у закрытой — принятые файлы при `success`
     и каталоги следа: операции и беклогов начатых попыток. `destructive` — удаления итогового
-    changelog; нет итогового changelog — пусто.
+    changelog: таблицы и колонки у операции модели, строки у операции seed; нет итогового
+    changelog — пусто. `rows` — счётчики строк по таблицам итогового changelog данных операции
+    seed; у операции модели — пусто.
     """
 
     operation: OperationView
@@ -43,4 +51,6 @@ class BuildReportOutput:
     backlogs: tuple[str, ...]
     accepted: AcceptedFiles | None
     commit_files: tuple[str, ...] | None
-    destructive: tuple[DestructiveChange, ...] = ()
+    destructive: tuple[DestructiveChange | DeletedRow, ...] = ()
+    seed: str | None = None
+    rows: tuple[TableRowCounts, ...] = ()

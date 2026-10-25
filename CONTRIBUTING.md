@@ -33,6 +33,7 @@
 | Подготовка окружения: цели `forge-env-*`, обёртка запуска CLI `forge.sh` | `tools/forge-env/` |
 | Сервисы БД и образ Liquibase | `docker/lbfr/` |
 | Навык `forge` | `.claude/skills/forge/` |
+| Шаблоны беклогов: операция модели `forge-model` и её попытка `forge-apply`, операция seed `forge-seed` и её попытка `forge-seed-apply` | `templates/` |
 | Установщик forge в целевой проект | `install.sh` |
 | Перечень поставки: что и куда копирует установщик | `delivery.txt` |
 | Тексты блоков forge в файлах kit'а | `install/blocks/` |
@@ -265,3 +266,4 @@ sh tools/make-lint/check.sh   # объём секций Makefile
 | 1.0.6 | 2026-10-23 | LBFR-019, OpenSpec change `run-integration-tests-in-ci` | Claude Code | Claude Opus 5.5 | В «Проверки» оговорка об отсутствии окружения интеграционных тестов в CI заменена описанием окружения, которое поднимает `tools/ci/integration-env.sh`, признака `FORGE_REQUIRE_INTEGRATION` и журналов при сбое; в CI пропускаются только тесты CLI `backlog`. Из «Выпуск версии» удалено предусловие о том, что проверки сценария не исполняют тесты с окружением. В «Устройство репозитория» добавлен `tools/ci/` |
 | 1.0.7 | 2026-10-23 | LBFR-027, OpenSpec change `fix-runner-block-insertion` | Claude Code | Claude Opus 5.5 | В разделе «Отличия от поставки kit'а» строка `runner.py` описывает новую форму блока — оператор за присваиванием `ALLOWED_TARGETS`, работающий с однострочным и многострочным множеством и со словарём `TARGET_VARIABLES`, — и ограничение: словарь, объявленный после `ALLOWED_TARGETS`, блок не видит |
 | 1.0.8 | 2026-10-24 | LBFR-028, OpenSpec change `add-seed-format` | Claude Code | Claude Opus 5.5 | В таблицу «Документы и носители значений» раздела «Устройство репозитория» добавлен справочник формата seed `docs/seed-format.md` |
+| 1.0.9 | 2026-10-25 | LBFR-028, OpenSpec change `add-seed-operation` | Claude Code | Claude Opus 5.5 | В таблицу «Код» раздела «Устройство репозитория» добавлена строка шаблонов беклогов `templates/`: `forge-model` и `forge-apply` операции модели, `forge-seed` и `forge-seed-apply` операции seed |

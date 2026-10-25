@@ -37,8 +37,20 @@ class UnsupportedChangeView:
 
 
 @dataclass(frozen=True)
+class SeedConflictView:
+    """Конфликт модели попытки с принятым seed."""
+
+    kind: str
+    table: str
+    column: str | None
+    path: str
+    message: str
+
+
+@dataclass(frozen=True)
 class GenerateChangelogOutput:
-    """Итог: путь changelog при успехе, иначе нарушения модели или неподдерживаемые изменения."""
+    """Итог: путь changelog при успехе, иначе нарушения модели, неподдерживаемые изменения
+    или конфликты с принятым seed."""
 
     changelog_path: str | None
     logical_file_path: str
@@ -46,3 +58,4 @@ class GenerateChangelogOutput:
     violations: tuple[ModelViolationView, ...]
     non_additive: tuple[UnsupportedChangeView, ...]
     generated: bool
+    seed_conflict: tuple[SeedConflictView, ...] = ()

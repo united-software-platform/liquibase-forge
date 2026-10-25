@@ -12,7 +12,7 @@ class OperationUnavailableError(Exception):
 
 
 class SeveralOpenOperationsError(Exception):
-    """В следе больше одной открытой операции: навык держит открытой только одну."""
+    """В следах всех видов вместе больше одной открытой операции: навык держит открытой одну."""
 
     def __init__(self, paths: tuple[str, ...]) -> None:
         super().__init__(f"открытых операций больше одной: {', '.join(paths)}")
@@ -21,7 +21,11 @@ class SeveralOpenOperationsError(Exception):
 
 @dataclass(frozen=True)
 class OperationRecord:
-    """Значения фронтматтера беклога операции; беклог без `allow_drop` даёт `False`."""
+    """Значения фронтматтера беклога операции.
+
+    Беклог без `allow_drop` даёт `False`, беклог без `kind` — операцию модели `model`,
+    беклог без `seed_adjusted` — `False`.
+    """
 
     path: str
     stamp: str
@@ -33,15 +37,17 @@ class OperationRecord:
     backlogs: Mapping[int, str | None]
     directories: Mapping[int, str]
     allow_drop: bool = False
+    kind: str = "model"
+    seed_adjusted: bool = False
 
 
 class OperationReadRepositoryInterface(Protocol):
-    """Чтение операций из следа."""
+    """Чтение операций из следов всех видов."""
 
     def get(self, path: str) -> OperationRecord:
         """Операция по пути её беклога; ошибка — `OperationUnavailableError`."""
         ...
 
     def open_operations(self) -> tuple[str, ...]:
-        """Пути беклогов операций со статусом `running` или `stopped`."""
+        """Пути беклогов операций со статусом `running` или `stopped` в следах всех видов."""
         ...

@@ -353,6 +353,14 @@ def test_installed_files_match_forge_repository(project: Path) -> None:
         assert (project / path).read_bytes() == (ROOT / path).read_bytes(), path
 
 
+def test_operation_templates_are_installed(project: Path) -> None:
+    assert _install(project).returncode == 0
+
+    for name in ("forge-model.md", "forge-apply.md", "forge-seed.md", "forge-seed-apply.md"):
+        path = f"templates/{name}"
+        assert (project / path).read_bytes() == (ROOT / path).read_bytes(), path
+
+
 def test_owner_change_outside_markers_survives_reinstall(project: Path) -> None:
     assert _install(project).returncode == 0
     makefile = project / "Makefile"

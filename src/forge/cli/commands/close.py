@@ -1,4 +1,4 @@
-"""Команда `forge close --operation <беклог>`: закрытие операции и принятие модели в корень."""
+"""Команда `forge close --operation <беклог>`: закрытие операции и принятие её файлов в корень."""
 
 from __future__ import annotations
 
@@ -63,6 +63,7 @@ def run(args: argparse.Namespace, use_case: CloseOperationUseCaseInterface | Non
             "accepted": (
                 {
                     "model": accepted.model,
+                    "seed": accepted.seed,
                     "changelog": accepted.changelog,
                     "master": accepted.master,
                 }
