@@ -49,6 +49,8 @@ fi
 # --- .env ------------------------------------------------------------------------------------
 
 # Остальные значения .env.example подходят как есть: FORGE_TEST_DB_*, перечень тестовых БД, образы.
+# Префикс имён контейнеров в шаблоне пуст, а на машине CI make forge-env-sync не запускается —
+# он задаётся здесь.
 # Токен разовый и живёт не дольше job'а; раннер слушает только 127.0.0.1.
 env_value() {
     sed -n "s/^$1=//p" .env | tail -n 1
@@ -61,7 +63,8 @@ port=$(sed -n 's/^AGENT_RUNNER_PORT=//p' .env.example | tail -n 1)
 url="http://127.0.0.1:$port"
 
 sed -e "s|^AGENT_RUNNER_TOKEN=.*|AGENT_RUNNER_TOKEN=$token|" \
-    -e "s|^AGENT_RUNNER_URL=.*|AGENT_RUNNER_URL=$url|" .env.example > .env
+    -e "s|^AGENT_RUNNER_URL=.*|AGENT_RUNNER_URL=$url|" \
+    -e "s|^LBFR_CONTAINER_PREFIX=.*|LBFR_CONTAINER_PREFIX=lbfr-ci|" .env.example > .env
 echo "AGENT_RUNNER_BIND=127.0.0.1" >> .env
 echo "::add-mask::$token"
 
@@ -72,9 +75,12 @@ docker compose pull lbfr-db-test || fail 1 "не удалось загрузит
 docker compose --profile tools build lbfr-liquibase || fail 1 "не удалось собрать образ lbfr-liquibase"
 docker compose up -d --wait lbfr-db-test || fail 1 "сервер lbfr-db-test не поднялся"
 
+# Контейнер ищется по сервису, а не по имени: имя несёт префикс проекта LBFR_CONTAINER_PREFIX.
 # Контейнер подключён к двум сетям, поэтому сеть выбирается явно. Имя сети Compose дополняет
 # именем проекта: <проект>_lbfr-net
-ip=$(docker inspect -f '{{range $name, $net := .NetworkSettings.Networks}}{{$name}} {{$net.IPAddress}}{{"\n"}}{{end}}' lbfr-db-test \
+container=$(docker compose ps -q lbfr-db-test)
+[ -n "$container" ] || fail 1 "не найден контейнер сервиса lbfr-db-test"
+ip=$(docker inspect -f '{{range $name, $net := .NetworkSettings.Networks}}{{$name}} {{$net.IPAddress}}{{"\n"}}{{end}}' "$container" \
     | awk '$1 ~ /(^|_)lbfr-net$/ && $2 != "" { print $2; exit }')
 [ -n "$ip" ] || fail 1 "не найден IP контейнера lbfr-db-test в сети lbfr-net"
 printf '%s lbfr-db-test\n' "$ip" | sudo tee -a /etc/hosts >/dev/null \

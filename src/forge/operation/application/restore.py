@@ -25,6 +25,8 @@ def restore(record: OperationRecord, factory: OperationFactory) -> Operation:
                 for n in range(1, ATTEMPT_LIMIT + 1)
             ],
             allow_drop=record.allow_drop,
+            kind=record.kind,
+            seed_adjusted=record.seed_adjusted,
         )
     except OperationRestoreError as error:
         raise OperationUnavailableError(f"беклог операции {record.path}: {error}") from None

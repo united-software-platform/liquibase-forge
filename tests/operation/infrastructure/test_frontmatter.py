@@ -15,7 +15,7 @@ from forge.operation.infrastructure.frontmatter import (
     FrontmatterOperationReadRepository,
     FrontmatterOperationWriteRepository,
 )
-from tests.operation.backlogs import STAMP, backlog_cli, generate, legacy, set_values
+from tests.operation.backlogs import STAMP, backlog_cli, generate, legacy, seed, set_values
 
 
 def _repository(
@@ -104,6 +104,38 @@ def test_open_operations(tmp_path: Path) -> None:
 
     assert found == (running.as_posix(),)
     assert len(warnings) == 1 and "20261017-170000" in warnings[0]
+
+
+def test_legacy_backlog_without_kind_reads_model(tmp_path: Path) -> None:
+    record = _repository(tmp_path).get(str(legacy(tmp_path)))
+
+    assert record.kind == "model"
+
+
+def test_seed_backlog_reads_kind(tmp_path: Path) -> None:
+    record = _repository(tmp_path).get(str(seed(tmp_path)))
+
+    assert record.kind == "seed"
+    assert restore(record, OperationFactory()).kind == "seed"
+
+
+def test_unknown_kind_is_unavailable(tmp_path: Path) -> None:
+    path = legacy(tmp_path)
+    set_values(path, operation="forge-model\nkind: fixture")
+
+    with pytest.raises(OperationUnavailableError, match="вид операции"):
+        restore(_repository(tmp_path).get(str(path)), OperationFactory())
+
+
+def test_open_operations_span_both_trails(tmp_path: Path) -> None:
+    model = legacy(tmp_path, "20261017-150000")
+    set_values(model, status="stopped")
+    filled = seed(tmp_path, "20261017-160000")
+    set_values(seed(tmp_path, "20261017-170000"), status="success")
+
+    found = _repository(tmp_path).open_operations()
+
+    assert found == (model.as_posix(), filled.as_posix())
 
 
 def test_open_operations_without_trail_root(tmp_path: Path) -> None:

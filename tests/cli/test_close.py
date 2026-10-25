@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 from forge.cli.commands import close
+from forge.operation.application.build_report.input import BuildReportInput
+from forge.operation.application.build_report.use_case import BuildReportUseCase
 from forge.operation.application.close_operation.use_case import CloseOperationUseCase
 from forge.operation.domain.factory import OperationFactory
 from forge.operation.infrastructure.accepted_state import FileAcceptedState
@@ -18,7 +21,7 @@ from forge.operation.infrastructure.frontmatter import (
     FrontmatterOperationReadRepository,
     FrontmatterOperationWriteRepository,
 )
-from tests.operation.backlogs import STAMP, legacy, set_values
+from tests.operation.backlogs import STAMP, legacy, seed, set_values
 
 
 def _close(
@@ -74,8 +77,10 @@ def test_first_successful_operation(tmp_path: Path, capsys: pytest.CaptureFixtur
     assert "status: success" in path.read_text(encoding="utf-8")
 
 
-def test_three_failures(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    path = legacy(tmp_path / "trail")
+def test_three_failures(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], kind: str, backlog: Callable[..., Path]
+) -> None:
+    path = backlog(tmp_path / "trail")
     for number in (1, 2, 3):
         _attempt(path, number, rollback_verified=True)
     set_values(
@@ -88,13 +93,14 @@ def test_three_failures(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> N
     code, payload = _close(tmp_path, capsys, path)
 
     assert (code, payload["operation"]["status"], payload["accepted"]) == (0, "failure", None)
+    assert payload["operation"]["kind"] == kind
     assert not (tmp_path / "db").exists()
 
 
 def test_three_failures_with_unconfirmed_rollback(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], kind: str, backlog: Callable[..., Path]
 ) -> None:
-    path = legacy(tmp_path / "trail")
+    path = backlog(tmp_path / "trail")
     for number, verified in ((1, True), (2, True), (3, False)):
         _attempt(path, number, rollback_verified=verified)
     set_values(
@@ -110,8 +116,10 @@ def test_three_failures_with_unconfirmed_rollback(
     assert "status: running" in path.read_text(encoding="utf-8")
 
 
-def test_premature_close(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    path = legacy(tmp_path / "trail")
+def test_premature_close(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], kind: str, backlog: Callable[..., Path]
+) -> None:
+    path = backlog(tmp_path / "trail")
     _attempt(path, 1, rollback_verified=True)
     set_values(path, verdict__attempt_1="failure")
     before = path.read_bytes()
@@ -203,3 +211,105 @@ def test_absolute_accepted_root(
     assert not (tmp_path / "db").exists()
     backlog = tmp_path / "trail" / "forge-model" / STAMP / "tasks.md"
     assert "status: running" in backlog.read_text(encoding="utf-8")
+
+
+def test_first_successful_seed_operation(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = seed(tmp_path / "trail")
+    directory = path.parent / "attempt-1"
+    directory.mkdir()
+    (directory / "seed.yaml").write_text("# seed попытки 1\n", encoding="utf-8")
+    (directory / "changelog.yaml").write_text("# changelog данных 1\n", encoding="utf-8")
+    set_values(path, verdict__attempt_1="success")
+
+    code, payload = _close(tmp_path, capsys, path)
+
+    db = tmp_path / "db"
+    assert (code, payload["operation"]["kind"], payload["operation"]["status"]) == (
+        0,
+        "seed",
+        "success",
+    )
+    assert payload["accepted"] == {
+        "model": None,
+        "seed": (db / "seed.yaml").as_posix(),
+        "changelog": (db / "changelog" / f"{STAMP}.yaml").as_posix(),
+        "master": (db / "changelog" / "master.yaml").as_posix(),
+    }
+    assert (db / "seed.yaml").read_text(encoding="utf-8") == "# seed попытки 1\n"
+    assert not (db / "model.yaml").exists()
+    assert f"file: {STAMP}.yaml" in (db / "changelog" / "master.yaml").read_text(encoding="utf-8")
+
+    code, payload = _close(tmp_path, capsys, path)
+
+    assert (code, payload["changed"], payload["accepted"]["seed"]) == (
+        0,
+        False,
+        (db / "seed.yaml").as_posix(),
+    )
+
+
+def test_model_close_adjusts_accepted_seed(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    db = tmp_path / "db"
+    db.mkdir()
+    (db / "seed.yaml").write_text(
+        "version: 1\ntables:\n  - name: order_status\n    rows:\n"
+        "      - {code: draft, color: grey}\n",
+        encoding="utf-8",
+    )
+    path = legacy(tmp_path / "trail")
+    _attempt(path, 1)
+    (path.parent / "attempt-1" / "changelog.yaml").write_text(
+        "databaseChangeLog:\n- changeSet:\n    changes:\n    - dropColumn:\n"
+        "        tableName: order_status\n        columnName: color\n",
+        encoding="utf-8",
+    )
+    set_values(path, verdict__attempt_1="success")
+
+    code, payload = _close(tmp_path, capsys, path)
+
+    assert (code, payload["accepted"]["seed"]) == (0, (db / "seed.yaml").as_posix())
+    assert "color" not in (db / "seed.yaml").read_text(encoding="utf-8")
+    assert "seed_adjusted: true" in path.read_text(encoding="utf-8")
+    use_case = BuildReportUseCase(
+        FrontmatterOperationReadRepository(tmp_path / "trail"),
+        JsonAttemptResultsReader(),
+        FileAcceptedState(db),
+        OperationFactory(),
+    )
+    report_output = use_case.execute(BuildReportInput(str(path)))
+    assert report_output.commit_files is not None
+    assert report_output.commit_files[:4] == (
+        (db / "model.yaml").as_posix(),
+        (db / "changelog" / f"{STAMP}.yaml").as_posix(),
+        (db / "changelog" / "master.yaml").as_posix(),
+        (db / "seed.yaml").as_posix(),
+    )
+
+    code, payload = _close(tmp_path, capsys, path)
+
+    assert (payload["changed"], payload["accepted"]["seed"]) == (
+        False,
+        (db / "seed.yaml").as_posix(),
+    )
+
+
+def test_model_close_without_seed_drops_leaves_seed(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    db = tmp_path / "db"
+    db.mkdir()
+    seed_text = "version: 1\ntables:\n  - name: order_status\n    rows: []\n"
+    (db / "seed.yaml").write_text(seed_text, encoding="utf-8")
+    path = legacy(tmp_path / "trail")
+    _attempt(path, 1)
+    set_values(path, verdict__attempt_1="success")
+
+    code, payload = _close(tmp_path, capsys, path)
+
+    assert (code, payload["accepted"]["seed"]) == (0, None)
+    assert (db / "seed.yaml").read_text(encoding="utf-8") == seed_text
+    assert "seed_adjusted" not in path.read_text(encoding="utf-8")

@@ -29,17 +29,19 @@ from forge.shared.application.settings import SettingsUnavailableError
 from forge.shared.domain.target_database import TargetDatabase
 from forge.shared.infrastructure.json_result_writer import JsonResultWriter
 from tests.migration.fakes import FakeDatabase, FakeSettings
-from tests.operation.backlogs import STAMP, legacy, set_values
+from tests.operation.backlogs import ATTEMPT_TRAILS, KINDS, STAMP, set_values
 
-ATTEMPT_BACKLOG = "backlog/forge-apply/{stamp}-{number}/tasks.md"
+ATTEMPT_BACKLOG = "backlog/{trail}/{stamp}-{number}/tasks.md"
 
 
-def _operation(tmp_path: Path, status: str, verdict: str | None = None) -> Path:
-    path = legacy(tmp_path / "trail")
+def _operation(tmp_path: Path, kind: str, status: str, verdict: str | None = None) -> Path:
+    path = KINDS[kind](tmp_path / "trail")
     values = {"status": status}
     if verdict is not None:
         values["verdict__attempt_1"] = verdict
-        values["backlog__attempt_1"] = ATTEMPT_BACKLOG.format(stamp=STAMP, number=1)
+        values["backlog__attempt_1"] = ATTEMPT_BACKLOG.format(
+            trail=ATTEMPT_TRAILS[kind], stamp=STAMP, number=1
+        )
     set_values(path, **values)
     return path
 
@@ -53,6 +55,7 @@ def _rollback(db: FakeDatabase) -> Callable[[], RollbackAttemptUseCaseInterface]
                 changelogs=db,
                 journal=db,
                 schema=db,
+                rows=db,
                 recreator=db,
                 gateway=db,
                 writer=JsonResultWriter(),
@@ -79,9 +82,12 @@ def _run(
 
 
 def test_abandon_rolls_back_applied_success_attempt(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    kind: str,
 ) -> None:
-    path = _operation(tmp_path, "running", "success")
+    path = _operation(tmp_path, kind, "running", "success")
     db = FakeDatabase()
     db.apply_attempt(3)
 
@@ -89,7 +95,9 @@ def test_abandon_rolls_back_applied_success_attempt(
 
     assert code == 0
     assert db.calls == ["rollback 3"]
-    assert (payload["operation"]["status"], payload["operation"]["stop_reason"]) == (
+    operation = payload["operation"]
+    assert (operation["kind"], operation["status"], operation["stop_reason"]) == (
+        kind,
         "abandoned",
         "передумал",
     )
@@ -101,9 +109,12 @@ def test_abandon_rolls_back_applied_success_attempt(
 
 
 def test_abandon_without_attempts_needs_no_database(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    kind: str,
 ) -> None:
-    path = _operation(tmp_path, "stopped")
+    path = _operation(tmp_path, kind, "stopped")
 
     def unavailable() -> RollbackAttemptUseCaseInterface:
         raise SettingsUnavailableError("FORGE_DB_HOST не задан")
@@ -115,9 +126,12 @@ def test_abandon_without_attempts_needs_no_database(
 
 
 def test_repeated_abandon(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    kind: str,
 ) -> None:
-    path = _operation(tmp_path, "abandoned")
+    path = _operation(tmp_path, kind, "abandoned")
     before = path.read_text(encoding="utf-8")
 
     code, payload = _run(tmp_path, capsys, monkeypatch, path, _rollback(FakeDatabase()))
@@ -127,9 +141,12 @@ def test_repeated_abandon(
 
 
 def test_closed_operation_is_refused(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    kind: str,
 ) -> None:
-    path = _operation(tmp_path, "success", "success")
+    path = _operation(tmp_path, kind, "success", "success")
     before = path.read_text(encoding="utf-8")
     db = FakeDatabase()
 
@@ -142,9 +159,12 @@ def test_closed_operation_is_refused(
 
 
 def test_unconfirmed_rollback_is_refused(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    kind: str,
 ) -> None:
-    path = _operation(tmp_path, "running", "failure")
+    path = _operation(tmp_path, kind, "running", "failure")
     before = path.read_text(encoding="utf-8")
     db = FakeDatabase()
     db.apply_attempt(3)
@@ -160,9 +180,12 @@ def test_unconfirmed_rollback_is_refused(
 
 
 def test_unavailable_runner_is_environment_error(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    kind: str,
 ) -> None:
-    path = _operation(tmp_path, "running", "success")
+    path = _operation(tmp_path, kind, "running", "success")
     before = path.read_text(encoding="utf-8")
     db = FakeDatabase()
     db.apply_attempt(3)

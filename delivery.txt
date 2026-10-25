@@ -20,3 +20,5 @@ docker/liquibase
 .claude/skills/forge
 templates/forge-model.md
 templates/forge-apply.md
+templates/forge-seed.md
+templates/forge-seed-apply.md

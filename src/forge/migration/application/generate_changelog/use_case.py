@@ -11,9 +11,11 @@ from forge.migration.application.generate_changelog.output import (
     ChangeSetView,
     GenerateChangelogOutput,
     ModelViolationView,
+    SeedConflictView,
     UnsupportedChangeView,
 )
 from forge.migration.application.operation_record import OperationRecordReaderInterface
+from forge.migration.application.seed_conflicts import SeedConflictCheckerInterface
 from forge.migration.domain.changelog import Changelog, ChangeSet
 from forge.migration.domain.changes import (
     AddColumn,
@@ -62,8 +64,10 @@ class GenerateChangelogUseCase:
     Удаления в режиме `auto` без согласия операции — `DropNotAllowedError`, прежний файл тоже
     удаляется; проверка идёт после проверок модели, чтобы агент сначала получил нарушения.
     Удаление набора уникальности или внешнего ключа данных не удаляет и согласия не требует.
-    Ошибки окружения — исключения: `OperationRecordUnavailableError`, `ModelUnreadableError`
-    модели попытки и `AcceptedModelError`.
+    Модель попытки, которой принятый seed не отвечает, — тоже штатный отказ `seed_conflict`
+    с удалением прежнего файла; проверка идёт после разницы, до согласия на удаления. Нет
+    принятого seed — проверки нет. Ошибки окружения — исключения: `OperationRecordUnavailableError`,
+    `ModelUnreadableError` модели попытки, `AcceptedModelError` и `AcceptedSeedError`.
     """
 
     def __init__(
@@ -73,12 +77,14 @@ class GenerateChangelogUseCase:
         writer: ChangelogWriterInterface,
         diff: ModelDiff,
         naming: ConstraintNamingInterface,
+        seeds: SeedConflictCheckerInterface | None = None,
     ) -> None:
         self._operations = operations
         self._models = models
         self._writer = writer
         self._diff = diff
         self._naming = naming
+        self._seeds = seeds
 
     def execute(self, input: GenerateChangelogInput) -> GenerateChangelogOutput:
         record = self._operations.read(input.operation_path)
@@ -100,6 +106,17 @@ class GenerateChangelogUseCase:
                 UnsupportedChangeView(c.code, c.table, c.column, c.message) for c in error.changes
             )
             return _refused(stamp.logical_file_path, non_additive=non_additive)
+        if self._seeds is not None and input.accepted_seed_path is not None:
+            conflicts = self._seeds.check(
+                input.accepted_seed_path, attempt, _dropped_columns(changes)
+            )
+            if conflicts:
+                self._writer.remove(input.out_path)
+                views = tuple(
+                    SeedConflictView(c.kind, c.table, c.column, c.path, c.message)
+                    for c in conflicts
+                )
+                return _refused(stamp.logical_file_path, seed_conflict=views)
         dropped = _dropped_objects(changes)
         if dropped and record.mode == "auto" and not record.allow_drop:
             self._writer.remove(input.out_path)
@@ -160,10 +177,20 @@ def _dropped_objects(changes: tuple[SchemaChange, ...]) -> tuple[str, ...]:
     return tuple(objects)
 
 
+def _dropped_columns(changes: tuple[SchemaChange, ...]) -> tuple[tuple[str, str], ...]:
+    """Удаляемые колонки `(таблица, колонка)`."""
+    return tuple(
+        (change.table.value, change.column.name.value)
+        for change in changes
+        if isinstance(change, DropColumn)
+    )
+
+
 def _refused(
     logical_file_path: str,
     violations: tuple[ModelViolationView, ...] = (),
     non_additive: tuple[UnsupportedChangeView, ...] = (),
+    seed_conflict: tuple[SeedConflictView, ...] = (),
 ) -> GenerateChangelogOutput:
     return GenerateChangelogOutput(
         changelog_path=None,
@@ -172,4 +199,5 @@ def _refused(
         violations=violations,
         non_additive=non_additive,
         generated=False,
+        seed_conflict=seed_conflict,
     )

@@ -7,16 +7,21 @@ from typing import Protocol
 
 
 class AcceptanceError(Exception):
-    """Принять модель и changelog в `db/` не удалось: нет файлов попытки или записи."""
+    """Принять файлы попытки в корень принятого состояния не удалось: нет файлов или записи."""
 
 
 @dataclass(frozen=True)
 class AcceptedFiles:
-    """Файлы принятого состояния операции."""
+    """Файлы принятого состояния операции: главный файл, changelog операции и `master.yaml`.
 
-    model: str
+    `model` — принятая модель операции модели; у операции seed — `None`. `seed` — принятый seed
+    операции seed; у операции модели — только если закрытие изменило принятый seed.
+    """
+
+    model: str | None
     changelog: str
     master: str
+    seed: str | None = None
 
 
 class AcceptedStateInterface(Protocol):
@@ -27,7 +32,15 @@ class AcceptedStateInterface(Protocol):
         ...
 
     def files(self, stamp: str) -> AcceptedFiles:
-        """Пути принятых файлов операции."""
+        """Пути принятых файлов операции модели."""
+        ...
+
+    def accept_seed(self, stamp: str, attempt_directory: str) -> AcceptedFiles:
+        """Принять seed и changelog данных попытки; модель не меняется, повтор ничего не меняет."""
+        ...
+
+    def seed_files(self, stamp: str) -> AcceptedFiles:
+        """Пути принятых файлов операции seed."""
         ...
 
 
@@ -70,8 +83,34 @@ class DestructiveChange:
     column: str | None
 
 
+@dataclass(frozen=True)
+class DeletedRow:
+    """Удаление changelog данных: таблица и первичный ключ строки — пары «колонка, значение»."""
+
+    table: str
+    key: tuple[tuple[str, str | None], ...]
+
+
+@dataclass(frozen=True)
+class TableRowCounts:
+    """Число вставленных, изменённых и удалённых строк таблицы в changelog данных."""
+
+    table: str
+    inserted: int
+    updated: int
+    deleted: int
+
+
+@dataclass(frozen=True)
+class DataChanges:
+    """Строки changelog данных: счётчики по таблицам в порядке появления и удалённые строки."""
+
+    tables: tuple[TableRowCounts, ...]
+    deleted: tuple[DeletedRow, ...]
+
+
 class AttemptResultsReaderInterface(Protocol):
-    """Результаты попытки: сверка и откат в её каталоге, удаления её changelog."""
+    """Результаты попытки: сверка и откат в её каталоге, удаления и строки её changelog."""
 
     def reconcile(self, attempt_directory: str) -> ReconcileSummary | None:
         """Итог сверки; нет файла — `None`."""
@@ -83,4 +122,8 @@ class AttemptResultsReaderInterface(Protocol):
 
     def destructive(self, changelog: str) -> tuple[DestructiveChange, ...]:
         """Удаления changelog; нет файла или он не читается — пустой перечень."""
+        ...
+
+    def data_changes(self, changelog: str) -> DataChanges:
+        """Строки changelog данных; нет файла или он не читается — пустые перечни."""
         ...

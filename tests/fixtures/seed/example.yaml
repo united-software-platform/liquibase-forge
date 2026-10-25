@@ -1,0 +1,32 @@
+version: 1
+tables:
+  - name: status_group
+    rows:
+      - {code: active, title: Активные}
+      - {code: closed, title: Закрытые}
+  - name: order_status
+    rows:
+      - code: draft
+        group_code: active
+        title: Черновик
+        sort_order: 10
+        is_final: false
+      - code: paid
+        group_code: active
+        title: Оплачен
+        sort_order: 20
+        is_final: false
+        fee: "12.50"
+        valid_from: "2026-01-01T00:00:00+03:00"
+      - code: cancelled
+        group_code: closed
+        title: Отменён
+        sort_order: 90
+        is_final: true
+        starts_on: 2026-02-28
+        external_id: "3f2504e0-4f89-41d3-9a0c-0305e82c3301"
+        description: null
+  - name: category
+    rows:
+      - {code: root, parent_code: root, title: Все товары}
+      - {code: shoes, parent_code: root, title: Обувь}

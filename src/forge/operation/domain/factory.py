@@ -11,6 +11,7 @@ from forge.operation.domain.operation import (
     SUCCESS,
     Attempt,
     Operation,
+    OperationKind,
     OperationStatus,
 )
 
@@ -19,7 +20,7 @@ _STAMP = re.compile(r"\d{8}-\d{6}")
 
 
 class OperationRestoreError(ValueError):
-    """Значения беклога не описывают операцию: неизвестный статус, режим, вердикт или штамп."""
+    """Значения беклога не описывают операцию: неизвестный вид, статус, режим, вердикт или штамп."""
 
 
 class OperationFactory:
@@ -35,10 +36,16 @@ class OperationFactory:
         stop_reason: str | None,
         attempts: Sequence[tuple[str | None, str | None, str]],
         allow_drop: bool = False,
+        kind: str = OperationKind.MODEL.value,
+        seed_adjusted: bool = False,
     ) -> Operation:
         """`attempts` — по попытке 1..3: вердикт, путь беклога попытки, каталог попытки."""
         if not _STAMP.fullmatch(stamp):
             raise OperationRestoreError(f"штамп операции {stamp!r} не в виде YYYYMMDD-HHMMSS")
+        try:
+            operation_kind = OperationKind(kind)
+        except ValueError:
+            raise OperationRestoreError(f"неизвестный вид операции {kind!r}") from None
         if mode not in MODES:
             raise OperationRestoreError(f"режим операции {mode!r} не interactive и не auto")
         try:
@@ -63,4 +70,6 @@ class OperationFactory:
             stop_reason,
             tuple(restored),
             allow_drop=allow_drop,
+            kind=operation_kind,
+            seed_adjusted=seed_adjusted,
         )

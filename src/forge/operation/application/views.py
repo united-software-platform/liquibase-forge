@@ -22,6 +22,7 @@ class OperationView:
     """Операция в ответе: значения беклога и выводы агрегата."""
 
     path: str
+    kind: str
     stamp: str
     intent: str
     mode: str
@@ -37,6 +38,7 @@ def operation_view(operation: Operation) -> OperationView:
     confirmed = operation.confirmed_attempt
     return OperationView(
         path=operation.path,
+        kind=operation.kind.value,
         stamp=operation.stamp,
         intent=operation.intent,
         mode=operation.mode,

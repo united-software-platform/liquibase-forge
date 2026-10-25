@@ -9,10 +9,12 @@ from forge.operation.domain.operation import (
     Operation,
     OperationClosedError,
     OperationDropConsentError,
+    OperationKind,
     OperationNotAbandonableError,
     OperationNotClosableError,
     OperationNotStoppedError,
     OperationStatus,
+    OperationTransitionError,
 )
 
 FAILED_ROLLBACKS = {1: True, 2: True, 3: True}
@@ -21,8 +23,10 @@ FAILED_ROLLBACKS = {1: True, 2: True, 3: True}
 def _operation(
     status: str = "running",
     verdicts: tuple[str | None, str | None, str | None] = (None, None, None),
+    kind: str = "model",
 ) -> Operation:
     return OperationFactory().restore(
+        kind=kind,
         path="backlog/forge-model/20261017-153000/tasks.md",
         stamp="20261017-153000",
         intent="Таблица клиентов",
@@ -138,7 +142,7 @@ def test_repeated_close_reports_previous_outcome() -> None:
 
 @pytest.mark.parametrize(
     ("field", "value"),
-    [("stamp", "2026-10-17"), ("mode", "manual"), ("status", "paused")],
+    [("stamp", "2026-10-17"), ("mode", "manual"), ("status", "paused"), ("kind", "fixture")],
 )
 def test_restore_rejects_unknown_values(field: str, value: str) -> None:
     values = {
@@ -300,3 +304,27 @@ def test_abandoned_operation_is_closed() -> None:
         None,
         False,
     )
+
+
+def test_kind_defaults_to_model() -> None:
+    assert _operation().kind is OperationKind.MODEL
+    assert _operation(kind="seed").kind is OperationKind.SEED
+
+
+def test_successful_model_close_adjusts_seed() -> None:
+    operation = _operation(verdicts=("success", None, None))
+    operation.close({})
+
+    operation.adjust_seed()
+
+    assert operation.seed_adjusted is True
+
+
+@pytest.mark.parametrize(("kind", "status"), [("seed", "success"), ("model", "running")])
+def test_seed_is_adjusted_only_by_successful_model_close(kind: str, status: str) -> None:
+    operation = _operation(status=status, verdicts=("success", None, None), kind=kind)
+
+    with pytest.raises(OperationTransitionError):
+        operation.adjust_seed()
+
+    assert operation.seed_adjusted is False

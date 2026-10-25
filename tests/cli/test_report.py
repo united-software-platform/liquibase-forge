@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -15,7 +17,8 @@ from forge.operation.domain.factory import OperationFactory
 from forge.operation.infrastructure.accepted_state import FileAcceptedState
 from forge.operation.infrastructure.attempt_results import JsonAttemptResultsReader
 from forge.operation.infrastructure.frontmatter import FrontmatterOperationReadRepository
-from tests.operation.backlogs import STAMP, legacy, set_values
+from tests.operation.backlogs import ATTEMPT_TRAILS, STAMP, legacy, seed, set_values
+from tests.seeding.support import MIGRATION_EXAMPLE
 
 DISCREPANCY = {
     "kind": "column_type_mismatch",
@@ -98,8 +101,10 @@ def test_success_on_second_attempt(tmp_path: Path, capsys: pytest.CaptureFixture
     assert "след операции" in payload["commit"]["hint"]
 
 
-def test_failure_after_three_attempts(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    path = legacy(tmp_path / "trail")
+def test_failure_after_three_attempts(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], kind: str, backlog: Callable[..., Path]
+) -> None:
+    path = backlog(tmp_path / "trail")
     for number in (1, 2, 3):
         _failed_attempt(path, number)
     set_values(
@@ -112,7 +117,7 @@ def test_failure_after_three_attempts(tmp_path: Path, capsys: pytest.CaptureFixt
 
     code, payload = _report(tmp_path, capsys, path)
 
-    assert code == 1
+    assert (code, payload["operation"]["kind"]) == (1, kind)
     assert len(payload["attempts"]) == 3
     assert all(
         a["reconcile"]["discrepancies"] and a["rollback"]["verified"] for a in payload["attempts"]
@@ -120,11 +125,14 @@ def test_failure_after_three_attempts(tmp_path: Path, capsys: pytest.CaptureFixt
     assert payload["accepted"] is None
     assert payload["commit"]["files"] == [f"{path.parent.as_posix()}/"]
     assert "не изменилось" in payload["commit"]["hint"]
-    assert payload["model"].endswith("attempt-3/model.yaml")
+    artifact = {"model": "model", "seed": "seed"}[kind]
+    assert payload[artifact].endswith(f"attempt-3/{artifact}.yaml")
 
 
-def test_stopped_operation(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    path = legacy(tmp_path / "trail")
+def test_stopped_operation(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], kind: str, backlog: Callable[..., Path]
+) -> None:
+    path = backlog(tmp_path / "trail")
     set_values(path, status="stopped")
     text = path.read_text(encoding="utf-8").replace(
         "status: stopped\n", 'status: stopped\nstop_reason: "отказ владельца"\n'
@@ -133,7 +141,7 @@ def test_stopped_operation(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -
 
     code, payload = _report(tmp_path, capsys, path)
 
-    assert code == 0
+    assert (code, payload["operation"]["kind"]) == (0, kind)
     assert (payload["operation"]["status"], payload["operation"]["stop_reason"]) == (
         "stopped",
         "отказ владельца",
@@ -141,13 +149,15 @@ def test_stopped_operation(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -
     assert (payload["attempts"], payload["model"], payload["commit"]) == ([], None, None)
 
 
-def test_abandoned_operation(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    path = legacy(tmp_path / "trail")
+def test_abandoned_operation(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], kind: str, backlog: Callable[..., Path]
+) -> None:
+    path = backlog(tmp_path / "trail")
     set_values(
         path,
         status="abandoned",
         verdict__attempt_1="success",
-        backlog__attempt_1=f"backlog/forge-apply/{STAMP}-1/tasks.md",
+        backlog__attempt_1=f"backlog/{ATTEMPT_TRAILS[kind]}/{STAMP}-1/tasks.md",
     )
     text = path.read_text(encoding="utf-8").replace(
         "status: abandoned\n", 'status: abandoned\nstop_reason: "передумал"\n'
@@ -171,9 +181,10 @@ def test_abandoned_operation(tmp_path: Path, capsys: pytest.CaptureFixture[str])
     assert payload["accepted"] is None
     assert payload["commit"]["files"] == [
         f"{path.parent.as_posix()}/",
-        f"backlog/forge-apply/{STAMP}-1/",
+        f"backlog/{ATTEMPT_TRAILS[kind]}/{STAMP}-1/",
     ]
     assert payload["commit"]["hint"] == report.ABANDONED_HINT
+    assert payload["operation"]["kind"] == kind
 
 
 def test_missing_backlog(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -254,3 +265,47 @@ def test_report_without_drops_has_empty_destructive(
     _, payload = _report(tmp_path, capsys, legacy(tmp_path / "trail"))
 
     assert payload["destructive"] == []
+
+
+def test_report_of_successful_seed_operation(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    stamp = "20261025-101500"
+    path = seed(tmp_path / "trail", stamp)
+    set_values(
+        path,
+        status="success",
+        verdict__attempt_1="success",
+        backlog__attempt_1=f"backlog/forge-seed-apply/{stamp}-1/tasks.md",
+    )
+    db = tmp_path / "db"
+    (db / "changelog").mkdir(parents=True)
+    shutil.copyfile(MIGRATION_EXAMPLE / "changelog.yaml", db / "changelog" / f"{stamp}.yaml")
+
+    code, payload = _report(tmp_path, capsys, path)
+
+    root = db.as_posix()
+    assert (code, payload["operation"]["kind"]) == (0, "seed")
+    assert (payload["model"], payload["seed"], payload["changelog"]) == (
+        None,
+        f"{root}/seed.yaml",
+        f"{root}/changelog/{stamp}.yaml",
+    )
+    assert payload["rows"] == [
+        {"table": "status_group", "inserted": 1, "updated": 0, "deleted": 0},
+        {"table": "order_status", "inserted": 2, "updated": 1, "deleted": 1},
+    ]
+    assert payload["destructive"] == [{"table": "order_status", "key": {"code": "archived"}}]
+    assert payload["commit"]["files"] == [
+        f"{root}/seed.yaml",
+        f"{root}/changelog/{stamp}.yaml",
+        f"{root}/changelog/master.yaml",
+        f"{path.parent.as_posix()}/",
+        f"backlog/forge-seed-apply/{stamp}-1/",
+    ]
+
+
+def test_model_report_has_no_rows(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    _, payload = _report(tmp_path, capsys, legacy(tmp_path / "trail"))
+
+    assert (payload["operation"]["kind"], payload["rows"], payload["seed"]) == ("model", [], None)

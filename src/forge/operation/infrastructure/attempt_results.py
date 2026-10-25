@@ -1,18 +1,22 @@
-"""Чтение `reconcile.json` и `rollback.json` каталога попытки и удалений changelog."""
+"""Чтение `reconcile.json` и `rollback.json` каталога попытки, удалений и строк changelog."""
 
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
 import yaml
 
 from forge.operation.application.accepted_state import (
+    DataChanges,
+    DeletedRow,
     DestructiveChange,
     DiscrepancySummary,
     ReconcileSummary,
     RollbackSummary,
+    TableRowCounts,
 )
 
 RECONCILE = "reconcile.json"
@@ -65,10 +69,13 @@ class JsonAttemptResultsReader:
         )
 
     def destructive(self, changelog: str) -> tuple[DestructiveChange, ...]:
-        return _destructive(changelog)
+        return destructive_changes(changelog)
+
+    def data_changes(self, changelog: str) -> DataChanges:
+        return _data_changes(changelog)
 
 
-def _destructive(path: str) -> tuple[DestructiveChange, ...]:
+def destructive_changes(path: str) -> tuple[DestructiveChange, ...]:
     """Удаления changelog по блокам `changes`: только формы `dropTable` и `dropColumn`.
 
     Формат changelog знает запись контекста Миграция; здесь читаются только эти две формы,
@@ -89,3 +96,48 @@ def _destructive(path: str) -> tuple[DestructiveChange, ...]:
     except (OSError, UnicodeDecodeError, yaml.YAMLError, KeyError, TypeError):
         return ()
     return tuple(found)
+
+
+_ACTIONS = {"insert": 0, "update": 1, "delete": 2}
+_CONDITION = re.compile(r"(\w+) = (?:NULL|'((?:[^']|'')*)'::[^']+?)(?: AND |$)")
+
+
+def _data_changes(path: str) -> DataChanges:
+    """Строки changelog данных по блокам `changes`: формы `insert`, `update` и `delete`.
+
+    Формат знает запись контекста Наполнение; здесь читаются только эти три формы и условие
+    `where` по колонкам первичного ключа, а тест сверяет их с выводом записи.
+    """
+    counts: dict[str, list[int]] = {}
+    deleted: list[DeletedRow] = []
+    try:
+        document = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
+        for entry in document["databaseChangeLog"] or []:
+            for change in entry["changeSet"]["changes"]:
+                [(action, body)] = change.items()
+                table = str(body["tableName"])
+                counts.setdefault(table, [0, 0, 0])[_ACTIONS[action]] += 1
+                if action == "delete":
+                    deleted.append(DeletedRow(table, _key(str(body["where"]))))
+    except (OSError, UnicodeDecodeError, yaml.YAMLError, KeyError, TypeError, ValueError):
+        return DataChanges((), ())
+    return DataChanges(
+        tuple(TableRowCounts(table, *numbers) for table, numbers in counts.items()),
+        tuple(deleted),
+    )
+
+
+def _key(where: str) -> tuple[tuple[str, str | None], ...]:
+    """Первичный ключ из условия `where`: `code = 'archived'::VARCHAR(32)` → `code`, `archived`."""
+    pairs: list[tuple[str, str | None]] = []
+    position = 0
+    while position < len(where):
+        found = _CONDITION.match(where, position)
+        if found is None or found.end() == position:
+            raise ValueError(f"условие {where!r} не по первичному ключу")
+        text = found.group(2)
+        pairs.append((found.group(1), None if text is None else text.replace("''", "'")))
+        position = found.end()
+    if not pairs:
+        raise ValueError("пустое условие where")
+    return tuple(pairs)

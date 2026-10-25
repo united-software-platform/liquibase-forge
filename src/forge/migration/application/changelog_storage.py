@@ -22,8 +22,22 @@ class ConstraintRef:
 
 
 @dataclass(frozen=True)
+class RowRef:
+    """Строка в changelog данных: таблица, условие `where` на первичный ключ и литералы.
+
+    `values` — пары «колонка → литерал SQL» из блока отката: прежние значения изменённых
+    колонок или все значения удалённой строки; у вставленной строки пусто.
+    """
+
+    table: str
+    where: str
+    values: tuple[tuple[str, str], ...] = ()
+
+
+@dataclass(frozen=True)
 class ChangelogSummary:
-    """Что changelog делает со схемой: `id` changeset, добавляемые и удаляемые объекты."""
+    """Что changelog делает со схемой и строками: `id` changeset, добавляемые и удаляемые
+    объекты, вставленные, изменённые и удалённые строки данных."""
 
     logical_file_path: str | None
     changeset_ids: tuple[str, ...]
@@ -33,6 +47,9 @@ class ChangelogSummary:
     dropped_columns: tuple[tuple[str, str], ...] = ()
     constraints: tuple[ConstraintRef, ...] = ()
     dropped_constraints: tuple[ConstraintRef, ...] = ()
+    inserted_rows: tuple[RowRef, ...] = ()
+    updated_rows: tuple[RowRef, ...] = ()
+    deleted_rows: tuple[RowRef, ...] = ()
 
 
 class ChangelogWriterInterface(Protocol):

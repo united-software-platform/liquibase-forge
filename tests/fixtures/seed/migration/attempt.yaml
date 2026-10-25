@@ -1,0 +1,11 @@
+version: 1
+tables:
+  - name: status_group
+    rows:
+      - {code: active, title: Активные}
+      - {code: closed, title: Закрытые}
+  - name: order_status
+    rows:
+      - {code: draft, group_code: active, title: Набросок}
+      - {code: paid, group_code: closed, title: Оплачен, fee: "12.50"}
+      - {code: new, group_code: active, title: Новый}

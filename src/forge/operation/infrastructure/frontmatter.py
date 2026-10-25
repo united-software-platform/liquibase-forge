@@ -11,6 +11,7 @@ import json
 import os
 import sys
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -20,9 +21,22 @@ from forge.operation.application.operation_reading import (
     OperationRecord,
     OperationUnavailableError,
 )
-from forge.operation.domain.operation import ATTEMPT_LIMIT, Operation
+from forge.operation.domain.operation import ATTEMPT_LIMIT, Operation, OperationKind
 
-OPERATION = "forge-model"
+
+@dataclass(frozen=True)
+class KindTrail:
+    """Каталоги следа вида операции: беклоги операций и беклоги их попыток."""
+
+    operation: str
+    attempts: str
+
+
+KINDS: dict[OperationKind, KindTrail] = {
+    OperationKind.MODEL: KindTrail("forge-model", "forge-apply"),
+    OperationKind.SEED: KindTrail("forge-seed", "forge-seed-apply"),
+}
+DEFAULT_KIND = OperationKind.MODEL
 OPEN_STATUSES = ("running", "stopped")
 
 
@@ -58,12 +72,20 @@ def _text(path: str, data: dict[str, Any], key: str) -> str:
     return value
 
 
-def _allow_drop(path: str, data: dict[str, Any]) -> bool:
-    value = data.get("allow_drop", False)
+def _flag(path: str, data: dict[str, Any], key: str) -> bool:
+    value = data.get(key, False)
     if not isinstance(value, bool):
         raise OperationUnavailableError(
-            f"беклог операции {path}: allow_drop должен быть true или false, получено {value!r}"
+            f"беклог операции {path}: {key} должен быть true или false, получено {value!r}"
         )
+    return value
+
+
+def _kind(path: str, data: dict[str, Any]) -> str:
+    """Вид операции; беклог прежнего шаблона без `kind` — операция модели."""
+    value = data.get("kind", DEFAULT_KIND.value)
+    if not isinstance(value, str):
+        raise OperationUnavailableError(f"беклог операции {path}: kind не строка")
     return value
 
 
@@ -85,7 +107,7 @@ def _attempts(path: str, data: dict[str, Any], key: str) -> dict[int, str | None
 
 
 class FrontmatterOperationReadRepository:
-    """Реализация контракта чтения операций по фронтматтеру беклогов следа."""
+    """Реализация контракта чтения операций по фронтматтеру беклогов следов всех видов."""
 
     def __init__(self, root: Path, warn: Callable[[str], None] | None = None) -> None:
         self._root = root
@@ -110,13 +132,20 @@ class FrontmatterOperationReadRepository:
             directories={
                 n: trail.get(n) or str(parent / f"attempt-{n}") for n in range(1, ATTEMPT_LIMIT + 1)
             },
-            allow_drop=_allow_drop(path, data),
+            allow_drop=_flag(path, data, "allow_drop"),
+            kind=_kind(path, data),
+            seed_adjusted=_flag(path, data, "seed_adjusted"),
         )
 
     def open_operations(self) -> tuple[str, ...]:
-        directory = self._root / OPERATION
+        found: list[str] = []
+        for trail in KINDS.values():
+            found.extend(self._open_in(self._root / trail.operation))
+        return tuple(found)
+
+    def _open_in(self, directory: Path) -> list[str]:
         if not directory.is_dir():
-            return ()
+            return []
         found: list[str] = []
         for backlog in sorted(directory.glob("*/tasks.md")):
             path = backlog.as_posix()
@@ -127,7 +156,7 @@ class FrontmatterOperationReadRepository:
                 continue
             if status in OPEN_STATUSES:
                 found.append(path)
-        return tuple(found)
+        return found
 
 
 def _scalar(value: str | None) -> str:
@@ -135,7 +164,8 @@ def _scalar(value: str | None) -> str:
 
 
 class FrontmatterOperationWriteRepository:
-    """Реализация контракта записи операции: строки `status`, `stop_reason` и `allow_drop`."""
+    """Реализация контракта записи операции: строки `status`, `stop_reason`, `seed_adjusted`
+    и `allow_drop`."""
 
     def save_drop_consent(self, operation: Operation) -> None:
         """`allow_drop: true` в беклоге операции и в порождённых беклогах попыток.
@@ -158,19 +188,25 @@ class FrontmatterOperationWriteRepository:
         start, end = _bounds(lines, operation.path)
         status_line = f"status: {operation.status.value}\n"
         reason_line = f"stop_reason: {_scalar(operation.stop_reason)}\n"
-        status_index = reason_index = None
+        status_index = reason_index = adjusted_index = None
         for index in range(start + 1, end):
             if lines[index].startswith("status:"):
                 status_index = index
             elif lines[index].startswith("stop_reason:"):
                 reason_index = index
+            elif lines[index].startswith("seed_adjusted:"):
+                adjusted_index = index
         if status_index is None:
             raise OperationUnavailableError(f"в беклоге операции {operation.path} нет status")
         lines[status_index] = status_line
         if reason_index is not None:
             lines[reason_index] = reason_line
         else:
-            lines.insert(status_index + 1, reason_line)
+            reason_index = status_index + 1
+            lines.insert(reason_index, reason_line)
+        # Строка пишется только при согласовании seed: беклоги прочих операций не меняются
+        if operation.seed_adjusted and adjusted_index is None:
+            lines.insert(reason_index + 1, "seed_adjusted: true\n")
         draft = path.with_name(path.name + ".tmp")
         draft.write_text("".join(lines), encoding="utf-8")
         os.replace(draft, path)

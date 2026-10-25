@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -14,7 +15,7 @@ from forge.cli.main import main
 from forge.operation.application.get_status.use_case import GetStatusUseCase
 from forge.operation.domain.factory import OperationFactory
 from forge.operation.infrastructure.frontmatter import FrontmatterOperationReadRepository
-from tests.operation.backlogs import generate, legacy, set_values
+from tests.operation.backlogs import generate, legacy, seed, set_values
 from tests.operation.fakes import FakeProbe
 
 
@@ -104,6 +105,41 @@ def test_latest_finds_stopped(tmp_path: Path, capsys: pytest.CaptureFixture[str]
         stopped.as_posix(),
         "stopped",
     )
+
+
+def test_status_names_kind(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], kind: str, backlog: Callable[..., Path]
+) -> None:
+    code, payload = _status(tmp_path, capsys, str(backlog(tmp_path)))
+
+    assert (code, payload["operation"]["kind"]) == (0, kind)
+
+
+def test_latest_finds_open_seed_operation(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    set_values(legacy(tmp_path, "20261017-150000"), status="success")
+    running = seed(tmp_path, "20261017-160000")
+
+    code, payload = _status(tmp_path, capsys, None)
+
+    operation = payload["operation"]
+    assert (code, operation["path"], operation["status"], operation["kind"]) == (
+        0,
+        running.as_posix(),
+        "running",
+        "seed",
+    )
+
+
+def test_open_operations_of_both_kinds(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    model = legacy(tmp_path, "20261017-150000")
+    filled = seed(tmp_path, "20261017-160000")
+
+    code, payload = _status(tmp_path, capsys, None)
+
+    assert (code, payload["error"]["kind"]) == (2, "several_open_operations")
+    assert payload["error"]["operations"] == [model.as_posix(), filled.as_posix()]
 
 
 def test_several_open_operations(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

@@ -37,6 +37,7 @@ def operation_payload(view: OperationView) -> dict[str, Any]:
     """Операция в ответе команды."""
     return {
         "path": view.path,
+        "kind": view.kind,
         "stamp": view.stamp,
         "intent": view.intent,
         "mode": view.mode,
