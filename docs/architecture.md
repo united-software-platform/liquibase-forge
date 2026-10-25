@@ -123,6 +123,7 @@ sequenceDiagram
 | `forge generate-seed` | seed попытки, принятый seed и модель (по умолчанию — из корня принятого состояния; нет файла — пустые), беклог операции (штамп, режим, `allow_drop`), путь changelog | путь changelog данных, перечень changeset видов `insert_rows`, `update_rows`, `delete_rows` с таблицей и числом строк, перечень удаляемых строк | seed попытки некорректен или изменения нарушают набор `unique` (удаления строк в `auto` без согласия — `2`) |
 | `forge apply` | changelog, параметры БД из окружения | `apply.json` рядом с changelog: результат Liquibase | ошибка Liquibase |
 | `forge reconcile` | модель, changelog, параметры БД из окружения | `reconcile.json` рядом с changelog: вердикт и перечень расхождений | есть расхождения |
+| `forge reconcile-seed` | seed попытки, changelog данных, принятый seed и модель (по умолчанию — из корня принятого состояния; нет файла — пустые), параметры БД из окружения | `reconcile.json` рядом с changelog: вердикт и перечень расхождений строк и журнала с PK строки `key` | есть расхождения (некорректный seed попытки — `2`) |
 | `forge rollback` | беклог операции, номер попытки | `rollback.json` в каталоге попытки: что откатано и проверка возврата | возврат схемы или строк не подтверждён |
 | `forge stop` | беклог операции, причина | статус `stopped` и причина во фронтматтере | операция закрыта |
 | `forge resume` | беклог операции, `--allow-drop` для согласия на удаления в `auto` | статус `running`; с ключом — `allow_drop: true` в беклогах операции и попыток | операция не остановлена; ключ для операции `interactive` |
@@ -135,6 +136,7 @@ sequenceDiagram
 операции; удаление набора уникальности или внешнего ключа данных не удаляет и согласия не требует.
 Подробности наката и отката —
 в [migration.md](./migration.md), сверки — в [reconciliation.md](./reconciliation.md),
+сверки seed — в [seed-reconciliation.md](./seed-reconciliation.md),
 статусов, закрытия и отчёта — в [operation.md](./operation.md), проверки seed —
 в [seed-format.md](./seed-format.md#проверка-seed).
 
@@ -263,3 +265,4 @@ flowchart LR
 | 1.0.12 | 2026-10-24 | LBFR-028, OpenSpec change `add-seed-format` | Claude Code | Claude Opus 5.5 | В контракт команд добавлена строка `forge validate-seed`: файл seed и модель с умолчанием из корня принятого состояния, перечень нарушений, код `1` при некорректном seed и `2` при некорректной модели; у компонента CLI `forge` добавлен контекст «Наполнение»; добавлена ссылка на `seed-format.md` |
 | 1.0.13 | 2026-10-24 | LBFR-028, OpenSpec change `add-seed-migration` | Claude Code | Claude Opus 5.5 | В контракт команд добавлена строка `forge generate-seed`: seed попытки, принятые seed и модель с умолчанием из корня принятого состояния, беклог операции, виды changeset данных и перечень удаляемых строк, код `1` при некорректном seed или конфликте `unique`; в строке `forge rollback` код `1` распространён на неподтверждённый возврат строк |
 | 1.0.14 | 2026-10-24 | LBFR-029, OpenSpec change `prefix-forge-container-names` | Claude Code | Claude Opus 5.5 | В разделе «Окружение исполнения» добавлены пункты «Имена контейнеров» — `container_name` с префиксом проекта `LBFR_CONTAINER_PREFIX`, который выводит `make forge-env-sync`, имена сервисов без префикса, отступление от `DOCK-002` — и «Конфликты с другими проектами» — проверка имён и хостового порта в `make forge-env-up` |
+| 1.0.15 | 2026-10-25 | LBFR-028, OpenSpec change `add-seed-reconciliation` | Claude Code | Claude Opus 5.5 | В контракт команд добавлена строка `forge reconcile-seed`: seed попытки, changelog данных, принятые seed и модель с умолчанием из корня принятого состояния, `reconcile.json` с перечнем расхождений строк и журнала и PK строки `key`, код `1` при расхождениях и `2` при некорректном seed попытки; добавлена ссылка на `seed-reconciliation.md` |

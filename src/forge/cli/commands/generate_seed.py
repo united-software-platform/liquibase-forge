@@ -19,10 +19,10 @@ from forge.modeling.application.load_model.use_case import LoadModelUseCase
 from forge.modeling.application.model_reading import ModelUnreadableError
 from forge.modeling.domain.factory import DataModelFactory
 from forge.modeling.infrastructure.yaml_reader import YamlModelDraftReader
+from forge.seeding.application.accepted_seed import AcceptedSeedError
 from forge.seeding.application.generate_seed_changelog.input import GenerateSeedChangelogInput
 from forge.seeding.application.generate_seed_changelog.output import GenerateSeedChangelogOutput
 from forge.seeding.application.generate_seed_changelog.use_case import (
-    AcceptedSeedError,
     GenerateSeedChangelogUseCase,
     GenerateSeedChangelogUseCaseInterface,
 )

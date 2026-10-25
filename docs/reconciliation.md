@@ -150,6 +150,10 @@ forge reconcile --model <каталог попытки>/model.yaml --changelog <
 
 Сообщения могут меняться, виды расхождений и поля — часть контракта.
 
+Поле `key` — PK строки — есть только у расхождений сверки seed, см.
+[seed-reconciliation.md](./seed-reconciliation.md#виды-расхождений). В ответе `forge reconcile`
+и его `reconcile.json` оно не выводится: расхождения схемы и журнала к строке не относятся.
+
 ---
 
 ## Ограничения и допущения
@@ -157,6 +161,8 @@ forge reconcile --model <каталог попытки>/model.yaml --changelog <
 - **Ограничение:** сверяются только таблицы, колонки, первичные ключи, ограничения уникальности
   и FK схемы `public`. Представления, последовательности, индексы, в том числе уникальные индексы
   без ограничения, и проверки `CHECK` не видны: в модели их нет.
+- **Ограничение:** строки таблиц `forge reconcile` не сверяет. Строки таблиц seed сверяет
+  `forge reconcile-seed`, см. [seed-reconciliation.md](./seed-reconciliation.md).
 - **Ограничение:** действия FK `ON DELETE` и `ON UPDATE` не сравниваются: модель их не описывает,
   а changelog создаёт FK с действием `NO ACTION`.
 - **Допущение:** схема целевой БД управляется только Liquibase Forge, поэтому посторонних
@@ -172,3 +178,4 @@ forge reconcile --model <каталог попытки>/model.yaml --changelog <
 |--------|------|--------|-------|--------|--------------------|
 | 1.0.0 | 2026-10-18 | OpenSpec change `forge-reconciliation` | Claude Code | Claude Opus 5.5 | Начальное создание: команда `forge reconcile` и её коды, состав сравнения, обратное отображение типов PostgreSQL, виды расхождений, порядок, формат `reconcile.json`, ограничения |
 | 1.0.1 | 2026-10-22 | LBFR-015, OpenSpec change `add-model-relations` | Claude Code | Claude Opus 5.5 | Сверка наборов уникальности и внешних ключей: строки состава сравнения, виды расхождений `unique_missing`, `unique_unexpected`, `foreign_key_missing`, `foreign_key_unexpected`, порядок после первичного ключа, пример `reconcile.json` с `unique_missing`, ограничения — нет уникальных индексов без ограничения, `CHECK` и действий FK |
+| 1.0.2 | 2026-10-25 | LBFR-028, OpenSpec change `add-seed-reconciliation` | Claude Code | Claude Opus 5.5 | В «Ограничения и допущения» добавлено ограничение со ссылкой на сверку строк seed `seed-reconciliation.md`; в раздел «Файл reconcile.json» — оговорка, что поле `key` расхождения в ответе `forge reconcile` не выводится |

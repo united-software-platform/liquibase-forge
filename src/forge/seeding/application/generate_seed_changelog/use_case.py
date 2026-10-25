@@ -16,6 +16,7 @@ from forge.modeling.application.load_model.use_case import (
 )
 from forge.modeling.domain.data_model import DataModel
 from forge.modeling.domain.violation import Violation
+from forge.seeding.application.accepted_seed import load_accepted_seed
 from forge.seeding.application.data_changelog_storage import DataChangelogWriterInterface
 from forge.seeding.application.generate_seed_changelog.input import GenerateSeedChangelogInput
 from forge.seeding.application.generate_seed_changelog.output import (
@@ -25,11 +26,7 @@ from forge.seeding.application.generate_seed_changelog.output import (
     SeedViolationView,
     UnsupportedRowChangeView,
 )
-from forge.seeding.application.seed_reading import (
-    SeedDraftReaderInterface,
-    SeedNotFoundError,
-    SeedUnreadableError,
-)
+from forge.seeding.application.seed_reading import SeedDraftReaderInterface
 from forge.seeding.domain.data_changelog import DataChangelog
 from forge.seeding.domain.factory import SeedFactory
 from forge.seeding.domain.row_changes import UnsupportedRowChangeError, row_label
@@ -37,10 +34,6 @@ from forge.seeding.domain.seed import Seed, SeedViolationError
 from forge.seeding.domain.seed_diff import SeedDiff
 
 _KINDS = {"insert": "insert_rows", "update": "update_rows", "delete": "delete_rows"}
-
-
-class AcceptedSeedError(Exception):
-    """Принятый seed существует, но его не прочитать или он не проходит проверку по модели."""
 
 
 class GenerateSeedChangelogUseCaseInterface(Protocol):
@@ -141,24 +134,7 @@ class GenerateSeedChangelogUseCase:
             ) from None
 
     def _accepted(self, model: DataModel, path: str) -> Seed:
-        try:
-            reading = self._reader.read(path)
-        except SeedNotFoundError:
-            return Seed(())
-        except SeedUnreadableError as error:
-            raise AcceptedSeedError(str(error)) from None
-        try:
-            seed = self._factory.create(model, reading.draft)
-        except SeedViolationError as error:
-            found = (*reading.violations, *error.violations)
-        else:
-            found = reading.violations
-        if found:
-            raise AcceptedSeedError(
-                f"принятый seed {path} не проходит проверку по модели, нарушений: {len(found)}; "
-                f"первое — {found[0].path}: {found[0].message}"
-            )
-        return seed
+        return load_accepted_seed(self._reader, self._factory, model, path)
 
 
 def _refused(
