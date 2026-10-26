@@ -40,6 +40,27 @@ def test_container_names_are_not_literals() -> None:
     assert set(_container_names("crm").values()).isdisjoint(_container_names("shop").values())
 
 
+def _services() -> dict[str, dict[str, object]]:
+    return yaml.safe_load(COMPOSE_FILE.read_text(encoding="utf-8"))["services"]
+
+
+def test_target_database_data_is_project_directory() -> None:
+    assert _services()["lbfr-db"]["volumes"] == ["./data/lbfr-db:/var/lib/postgresql/data"]
+
+
+def test_named_volume_is_not_declared() -> None:
+    compose = yaml.safe_load(COMPOSE_FILE.read_text(encoding="utf-8"))
+
+    assert "lbfr-db-data" not in (compose.get("volumes") or {})
+
+
+def test_test_server_keeps_data_in_tmpfs() -> None:
+    service = _services()["lbfr-db-test"]
+
+    assert service["tmpfs"] == ["/var/lib/postgresql/data"]
+    assert "volumes" not in service
+
+
 def test_template_has_empty_container_prefix() -> None:
     lines = ENV_FRAGMENT.read_text(encoding="utf-8").splitlines()
 
@@ -175,10 +196,22 @@ def _ps(tmp_path: Path, key: str, name: str, project: str, directory: str) -> No
     (tmp_path / f"ps-{key}").write_text(f"{name}\t{project}\t{directory}\n")
 
 
-def _script(tmp_path: Path, script: str, env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+def _project(tmp_path: Path) -> Path:
+    """Корень проекта для up.sh: скрипт вызывает preflight.sh и создаёт data/ относительно корня."""
+    project = tmp_path / "project"
+    (project / "tools").mkdir(parents=True, exist_ok=True)
+    link = project / "tools" / "forge-env"
+    if not link.exists():
+        link.symlink_to(ROOT / "tools" / "forge-env")
+    return project
+
+
+def _script(
+    tmp_path: Path, script: str, env: dict[str, str], cwd: Path = ROOT
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [SH, str(ROOT / "tools" / "forge-env" / script)],
-        cwd=ROOT,
+        cwd=cwd,
         env=env,
         capture_output=True,
         text=True,
@@ -260,7 +293,7 @@ def test_preflight_reports_every_conflict(tmp_path: Path) -> None:
 def test_up_stops_before_compose_up_on_conflict(tmp_path: Path) -> None:
     env = _stub_env(tmp_path)
     _ps(tmp_path, "11932", "lbfr-db", "other", "/home/me/other")
-    result = _script(tmp_path, "up.sh", env)
+    result = _script(tmp_path, "up.sh", env, _project(tmp_path))
 
     assert result.returncode == 1
     calls = (tmp_path / "docker-calls").read_text().splitlines()
@@ -269,9 +302,39 @@ def test_up_stops_before_compose_up_on_conflict(tmp_path: Path) -> None:
 
 
 def test_up_runs_preflight_before_compose_up(tmp_path: Path) -> None:
-    result = _script(tmp_path, "up.sh", _stub_env(tmp_path))
+    result = _script(tmp_path, "up.sh", _stub_env(tmp_path), _project(tmp_path))
 
     assert result.returncode == 0, result.stderr
     calls = (tmp_path / "docker-calls").read_text().splitlines()
     preflight = calls.index("compose config --format json lbfr-db lbfr-db-test")
     assert preflight < calls.index("compose up -d --wait lbfr-db lbfr-db-test")
+
+
+def test_up_creates_target_database_data_directory(tmp_path: Path) -> None:
+    project = _project(tmp_path)
+    result = _script(tmp_path, "up.sh", _stub_env(tmp_path), project)
+
+    assert result.returncode == 0, result.stderr
+    assert (project / "data" / "lbfr-db").is_dir()
+
+
+def test_up_keeps_existing_data(tmp_path: Path) -> None:
+    project = _project(tmp_path)
+    (project / "data" / "lbfr-db").mkdir(parents=True)
+    (project / "data" / "lbfr-db" / "PG_VERSION").write_text("17\n")
+    (project / "data" / "fixtures.csv").write_text("id\n1\n")
+    result = _script(tmp_path, "up.sh", _stub_env(tmp_path), project)
+
+    assert result.returncode == 0, result.stderr
+    assert (project / "data" / "lbfr-db" / "PG_VERSION").read_text() == "17\n"
+    assert (project / "data" / "fixtures.csv").read_text() == "id\n1\n"
+
+
+def test_up_does_not_create_data_directory_on_conflict(tmp_path: Path) -> None:
+    project = _project(tmp_path)
+    env = _stub_env(tmp_path)
+    _ps(tmp_path, "11932", "lbfr-db", "other", "/home/me/other")
+    result = _script(tmp_path, "up.sh", env, project)
+
+    assert result.returncode == 1
+    assert not (project / "data").exists()
