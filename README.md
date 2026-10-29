@@ -2,6 +2,7 @@
 
 [![версия Liquibase Forge из файла VERSION](https://img.shields.io/badge/dynamic/regex?url=https%3A%2F%2Fraw.githubusercontent.com%2Funited-software-platform%2Fliquibase-forge%2Fmain%2FVERSION&search=%28%5B%5Cd.%5D%2B%29&replace=v%241&label=version&color=007EC6)](./VERSION)
 [![лицензия MIT](https://img.shields.io/badge/license-MIT-007EC6)](./LICENSE)
+[![проверки: тесты, линтер, форматирование и типы](https://github.com/united-software-platform/liquibase-forge/actions/workflows/checks.yml/badge.svg?branch=main)](https://github.com/united-software-platform/liquibase-forge/actions/workflows/checks.yml?query=branch%3Amain)
 
 Liquibase Forge строит модель данных PostgreSQL по намерению, сформулированному агенту, проверяет её
 накатом, сверкой и откатом и принимает в `db/` вашего проекта. Здесь — путь от установки до первой
