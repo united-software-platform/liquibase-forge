@@ -11,6 +11,7 @@
 - [Changelog](#changelog)
 - [Удаления](#удаления)
 - [Связи и уникальность](#связи-и-уникальность)
+- [Генерация значения и перечни](#генерация-значения-и-перечни)
 - [Идентичность changeset](#идентичность-changeset)
 - [Неподдерживаемые изменения](#неподдерживаемые-изменения)
 - [Команда forge generate](#команда-forge-generate)
@@ -109,15 +110,17 @@ databaseChangeLog:
 Правила построения:
 
 - **Порядок.** Changeset идут группами: удаление внешних ключей, удаление наборов уникальности,
-  удаление таблиц, удаление колонок, создание таблиц, добавление колонок, добавление наборов
-  уникальности, добавление внешних ключей. Удаления идут в порядке таблиц и объектов принятой
+  удаление перечней значений, удаление таблиц, удаление колонок, создание таблиц, добавление
+  колонок, добавление наборов уникальности, добавление перечней значений, добавление внешних
+  ключей. Удаления идут в порядке таблиц и объектов принятой
   модели, добавления — модели попытки. Номера `id` идут подряд через весь changelog.
 - **Таблица.** Новая таблица — один changeset из `createTable` и `addPrimaryKey`; её наборы
-  уникальности и внешние ключи — отдельные changeset. Первичный ключ
+  уникальности, перечни значений и внешние ключи — отдельные changeset. Первичный ключ
   (Primary Key, PK) создаётся отдельно, чтобы сохранить порядок колонок `primary_key` модели;
   признак `primaryKey` в колонках построил бы ключ в порядке колонок таблицы.
 - **Колонка.** Новая колонка существующей таблицы — один changeset `addColumn`.
-- **NOT NULL.** `nullable: false` получают колонки PK и колонки с `nullable: false`.
+- **NOT NULL.** `nullable: false` получают колонки PK, колонки с генерацией значения и колонки
+  с `nullable: false`.
 - **Типы.** Отображение типов в PostgreSQL — по таблице [model-format.md](./model-format.md#типы-колонок).
   `timestamp` пишется как `TIMESTAMP WITHOUT TIME ZONE`, `timestamp_tz` — как
   `TIMESTAMP WITH TIME ZONE`.
@@ -404,6 +407,142 @@ databaseChangeLog:
 
 ---
 
+## Генерация значения и перечни
+
+Колонка с `generated: identity` получает в определении `autoIncrement: true` и `generationType:
+BY DEFAULT` — везде, где changelog описывает колонку: в `createTable`, `addColumn` и откатах
+удаления таблицы и колонки. Перечень значений `check` — отдельный changeset `sql`: открытый
+Liquibase не умеет создать именованное ограничение `CHECK` отдельным изменением.
+
+Ниже перечень `event.source` расширяется значением `import`, в `event` добавляется колонка
+`priority` с перечнем, а новая таблица `event_note` получает ключ с генерацией значения.
+
+Принятая модель:
+
+```yaml
+version: 1
+tables:
+  - name: event
+    columns:
+      - {name: id, type: bigint, generated: identity}
+      - {name: source, type: string, length: 16, nullable: false, check: [collector, manual]}
+    primary_key: [id]
+```
+
+Модель попытки:
+
+```yaml
+version: 1
+tables:
+  - name: event
+    columns:
+      - {name: id, type: bigint, generated: identity}
+      - {name: source, type: string, length: 16, nullable: false, check: [collector, manual, import]}
+      - {name: priority, type: integer, check: [1, 2, 3]}
+    primary_key: [id]
+  - name: event_note
+    columns:
+      - {name: id, type: bigint, generated: identity}
+      - {name: note, type: text}
+    primary_key: [id]
+```
+
+Changelog операции со штампом `20261017-153000`:
+
+```yaml
+# Changelog операции 20261017-153000: построен forge generate, вручную не правится
+databaseChangeLog:
+- changeSet:
+    id: 20261017-153000-01
+    author: forge
+    logicalFilePath: db/changelog/20261017-153000.yaml
+    changes:
+    - sql:
+        sql: ALTER TABLE event DROP CONSTRAINT ck_event_1d0e881d
+    rollback:
+    - sql:
+        sql: ALTER TABLE event ADD CONSTRAINT ck_event_1d0e881d CHECK (source IN ('collector', 'manual'))
+- changeSet:
+    id: 20261017-153000-02
+    author: forge
+    logicalFilePath: db/changelog/20261017-153000.yaml
+    changes:
+    - createTable:
+        tableName: event_note
+        columns:
+        - column:
+            name: id
+            type: BIGINT
+            autoIncrement: true
+            generationType: BY DEFAULT
+            constraints:
+              nullable: false
+        - column:
+            name: note
+            type: TEXT
+    - addPrimaryKey:
+        tableName: event_note
+        columnNames: id
+        constraintName: pk_event_note
+- changeSet:
+    id: 20261017-153000-03
+    author: forge
+    logicalFilePath: db/changelog/20261017-153000.yaml
+    changes:
+    - addColumn:
+        tableName: event
+        columns:
+        - column:
+            name: priority
+            type: INTEGER
+- changeSet:
+    id: 20261017-153000-04
+    author: forge
+    logicalFilePath: db/changelog/20261017-153000.yaml
+    changes:
+    - sql:
+        sql: ALTER TABLE event ADD CONSTRAINT ck_event_f534a238 CHECK (source IN ('collector', 'import', 'manual'))
+    rollback:
+    - sql:
+        sql: ALTER TABLE event DROP CONSTRAINT ck_event_f534a238
+- changeSet:
+    id: 20261017-153000-05
+    author: forge
+    logicalFilePath: db/changelog/20261017-153000.yaml
+    changes:
+    - sql:
+        sql: ALTER TABLE event ADD CONSTRAINT ck_event_97cf438e CHECK (priority IN (1, 2, 3))
+    rollback:
+    - sql:
+        sql: ALTER TABLE event DROP CONSTRAINT ck_event_97cf438e
+```
+
+Тест проверяет, что `forge generate` строит из этих моделей ровно этот changelog.
+
+Правила генерации значения и перечней:
+
+- **Режим генерации.** `BY DEFAULT` задан явно, чтобы не зависеть от умолчания Liquibase:
+  БД выдаёт значение вставке без него и принимает явное значение — так seed наполняет справочники.
+- **Тождество перечня.** Перечень сравнивается по колонке и множеству значений: перестановка
+  значений changeset не даёт, изменённый перечень — удаление прежнего и добавление нового.
+- **Имя перечня.** `ck_<таблица>_<hash8>`: `hash8` — первые восемь знаков SHA-256 от таблицы,
+  колонки и значений в каноническом порядке, записанных JSON. Таблица в имени обрезается
+  до 51 символа, как у `fk_` и `uq_`.
+- **Запись.** Значения пишутся в каноническом порядке: строки — литералами SQL с удвоенными
+  кавычками, целые — числами. Changeset `sql` несёт явный `rollback`: Liquibase не выводит откат
+  `sql` сам.
+- **Порядок.** Удаление перечня идёт после удаления наборов и раньше удаления его колонки;
+  добавление — после добавления колонок и наборов. Перечни удаляемой таблицы отдельно
+  не удаляются: их снимает `dropTable`, а его откат восстанавливает вместе с наборами.
+- **Сводка.** `forge rollback` узнаёт перечень в changelog попытки только по двум формам `sql`,
+  которые пишет forge: `ALTER TABLE … ADD CONSTRAINT ck_… CHECK (…)` и `ALTER TABLE … DROP
+  CONSTRAINT ck_…`. Другой `sql` — changelog не в формате `forge generate`, ошибка чтения.
+- **Согласие.** Удаление перечня данных не удаляет и `allow_drop` не требует.
+- **Новая колонка с генерацией** в существующей таблице разрешена: PostgreSQL заполнит значения
+  существующих строк при `ADD COLUMN`.
+
+---
+
 ## Идентичность changeset
 
 | Атрибут | Значение | Зачем |
@@ -419,8 +558,9 @@ databaseChangeLog:
 
 ## Неподдерживаемые изменения
 
-Changelog выражает новые и удалённые таблицы, колонки, наборы уникальности и FK. Смена типа, итоговой допустимости NULL
-и первичного ключа — неподдерживаемое изменение: `forge generate` отклоняет модель кодом `1`
+Changelog выражает новые и удалённые таблицы, колонки, наборы уникальности, перечни значений
+и FK. Смена типа, итоговой допустимости NULL, генерации значения и первичного ключа —
+неподдерживаемое изменение: `forge generate` отклоняет модель кодом `1`
 и перечисляет все такие изменения сразу в поле ответа `non_additive`.
 
 | Код | Когда |
@@ -428,6 +568,7 @@ Changelog выражает новые и удалённые таблицы, ко
 | `column_type_changed` | У колонки другой тип или другие параметры типа |
 | `column_nullable_changed` | У колонки другая итоговая допустимость NULL |
 | `primary_key_changed` | У таблицы другой набор или порядок колонок PK, в том числе удалена колонка PK |
+| `column_generated_changed` | У существующей колонки появилась или снята генерация значения `generated` |
 
 Уточнения:
 
@@ -436,6 +577,10 @@ Changelog выражает новые и удалённые таблицы, ко
 - **Итоговая допустимость NULL** учитывает PK: явное `nullable: false` у колонки PK изменением
   не считается.
 - **Порядок колонок таблицы** изменением не считается.
+- **Генерация значения** у существующей колонки — перенос данных, а не изменение схемы:
+  последовательность пришлось бы сдвигать за уже записанные значения, а откат её не вернул бы.
+  Смена NULL, вызванная только генерацией, отдельно не сообщается: перечень называет
+  `column_generated_changed`.
 - **Новая колонка с `nullable: false`** в существующей таблице разрешена. На непустой таблице
   накат завершится ошибкой Liquibase, и попытка станет неуспешной с понятной диагностикой.
 
@@ -454,7 +599,7 @@ forge generate --model <модель попытки> [--accepted <принята
 
 | Код | Когда | Ответ |
 |-----|-------|-------|
-| `0` | Changelog записан | `changelog`, `logical_file_path`, перечень `changesets` с `id`, видом (`create_table`, `add_column`, `drop_table`, `drop_column`, `add_unique`, `drop_unique`, `add_foreign_key`, `drop_foreign_key`), таблицей, колонкой и именем ограничения `constraint`; у видов ограничений `column` — `null`, у прочих `constraint` — `null` |
+| `0` | Changelog записан | `changelog`, `logical_file_path`, перечень `changesets` с `id`, видом (`create_table`, `add_column`, `drop_table`, `drop_column`, `add_unique`, `drop_unique`, `add_check`, `drop_check`, `add_foreign_key`, `drop_foreign_key`), таблицей, колонкой и именем ограничения `constraint`; у наборов и FK `column` — `null`, у перечней `column` — колонка перечня, у видов таблиц и колонок `constraint` — `null` |
 | `1` | Модель попытки нарушает формат или требует неподдерживаемых изменений | `changelog: null`, `violations` как у `forge validate` либо `non_additive`; прежний файл `--out` удалён |
 | `2` | Нет беклога операции или `subject` не штамп; модель попытки не прочитать; принятая модель есть, но некорректна; без `--accepted` некорректен `FORGE_ACCEPTED_DIR`; удаления в режиме `auto` без согласия операции | Объект `error` с видом `operation_unavailable`, `model_unreadable`, `accepted_model_invalid`, `accepted_root_invalid` или `drop_not_allowed` с перечнем `objects`; при `drop_not_allowed` прежний файл `--out` удалён |
 
@@ -563,6 +708,8 @@ flowchart TD
 | `foreign_key_absent` | Нет внешнего ключа, который добавляет changelog попытки |
 | `unique_present` | Есть набор уникальности, который удаляет changelog попытки: откат вернул его |
 | `foreign_key_present` | Есть внешний ключ, который удаляет changelog попытки: откат вернул его |
+| `check_absent` | Нет перечня значений, который добавляет changelog попытки |
+| `check_present` | Есть перечень значений, который удаляет changelog попытки: откат вернул его |
 | `row_absent` | Нет строки, которую вставляет changelog данных попытки |
 | `row_present` | Есть строка, которую удаляет changelog данных попытки, со значениями из её отката |
 | `row_restored` | Строка, которую изменяет changelog данных попытки, имеет прежние значения из её отката |
@@ -606,7 +753,11 @@ changelog данных — в [seed-migration.md](./seed-migration.md).
 ## Ограничения и допущения
 
 - **Ограничение:** только PostgreSQL. Changelog добавляет и удаляет таблицы, колонки, наборы
-  уникальности и FK; смена типа, NULL и первичного ключа не поддерживается.
+  уникальности, перечни значений и FK; смена типа, NULL, генерации значения и первичного ключа
+  не поддерживается.
+- **Риск:** добавление или сужение перечня на таблице со строками вне перечня завершается
+  ошибкой наката → попытка неуспешна с диагностикой. Строки принятого seed проверяются заранее
+  (`check_violated_by_seed`), прочие данные — нет.
 - **Риск:** добавление FK или набора уникальности к таблице с данными, которые ему не отвечают,
   завершается ошибкой Liquibase → попытка неуспешна с диагностикой, откат снимает применённое.
   Данные перед добавлением ограничения не проверяются.
@@ -633,3 +784,4 @@ changelog данных — в [seed-migration.md](./seed-migration.md).
 | 1.0.3 | 2026-10-22 | LBFR-015, OpenSpec change `add-model-relations` | Claude Code | Claude Opus 5.5 | Связи и уникальность: раздел «Связи и уникальность» с примером changelog ограничений, тождество по содержимому, имена `fk_`/`uq_<таблица>_<hash8>`, удаление таблицы со связями и откат; порядок changeset разбит на восемь групп, пример раздела «Changelog» приведён к нему — создание таблиц идёт раньше добавления колонок; виды changeset ограничений и поле `constraint` в ответе `forge generate`; проверки возврата `unique_absent`, `foreign_key_absent`, `unique_present`, `foreign_key_present`; риски наката ограничений |
 | 1.0.4 | 2026-10-23 | LBFR-022, OpenSpec change `add-operation-abandon` | Claude Code | Claude Opus 5.5 | Раздел «Откат»: исключение для вердикта `success` при отказе от операции — `forge abandon` откатывает подтверждённую попытку с проверкой возврата и записью `rollback.json`, у `forge rollback` такого ключа нет |
 | 1.0.5 | 2026-10-24 | LBFR-028, OpenSpec change `add-seed-migration` | Claude Code | Claude Opus 5.5 | Changelog данных `forge generate-seed`: в разделе «Откат» — откат changeset данных тем же `rollback-count` по явным блокам `rollback`; в разделе «Проверка возврата» — проверки строк `row_absent`, `row_present`, `row_restored` запросом `count(*)` с `IS NOT DISTINCT FROM` по литералам changelog попытки, возврат строк на запасном пути; добавлены ссылки на `seed-migration.md` |
+| 1.0.6 | 2026-10-29 | LBFR-031, OpenSpec change `add-column-identity-and-check` | Claude Code | Claude Opus 5.5 | Раздел «Генерация значения и перечни» с примером моделей и changelog: `autoIncrement` и `generationType: BY DEFAULT` у колонки с генерацией, перечень — changeset `sql` с явным откатом, имя `ck_<таблица>_<hash8>`, тождество, порядок, разбор сводки; порядок групп changeset — десять групп; NOT NULL колонки с генерацией; неподдерживаемое изменение `column_generated_changed`; виды `add_check` и `drop_check` с колонкой в ответе `forge generate`; проверки возврата `check_absent` и `check_present`; ограничения и риск наката перечня на данные |

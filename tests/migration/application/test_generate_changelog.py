@@ -26,6 +26,7 @@ from forge.modeling.application.model_reading import ModelNotFoundError
 from forge.modeling.domain.factory import DataModelFactory
 from forge.modeling.domain.foreign_key import ForeignKey
 from forge.modeling.domain.identifier import ColumnName, TableName
+from forge.modeling.domain.value_list import ValueList
 from forge.modeling.infrastructure.yaml_reader import YamlModelDraftReader
 from tests.migration.models import CUSTOMER, INVOICE
 
@@ -318,4 +319,40 @@ def test_constraint_drops_in_auto_need_no_consent(tmp_path: Path) -> None:
     assert [(c.kind, c.table) for c in output.changesets] == [
         ("drop_foreign_key", "invoice"),
         ("drop_unique", "customer"),
+    ]
+
+
+EVENT_CHECKED = """
+  - name: event
+    columns:
+      - {name: id, type: bigint, generated: identity}
+      - {name: source, type: text, check: [collector, manual]}
+    primary_key: [id]
+"""
+
+
+def test_check_changesets_name_constraint_and_column(tmp_path: Path) -> None:
+    created = _run(tmp_path, EVENT_CHECKED)
+    dropped = _run(
+        tmp_path, EVENT_CHECKED.replace(", check: [collector, manual]", ""), EVENT_CHECKED
+    )
+
+    expected = LiquibaseConstraintNaming().check(
+        TableName("event"), ColumnName("source"), ValueList(("collector", "manual"))
+    )
+    assert [(c.kind, c.table, c.column, c.constraint) for c in created.changesets] == [
+        ("create_table", "event", None, None),
+        ("add_check", "event", "source", expected),
+    ]
+    assert [(c.kind, c.column, c.constraint) for c in dropped.changesets] == [
+        ("drop_check", "source", expected)
+    ]
+
+
+def test_generation_change_is_unsupported_change(tmp_path: Path) -> None:
+    output = _run(tmp_path, EVENT_CHECKED, EVENT_CHECKED.replace(", generated: identity", ""))
+
+    assert output.generated is False
+    assert [(c.code, c.table, c.column) for c in output.non_additive] == [
+        ("column_generated_changed", "event", "id")
     ]

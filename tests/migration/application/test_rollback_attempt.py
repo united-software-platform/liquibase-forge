@@ -316,3 +316,36 @@ def test_constraint_checks_fail_when_not_returned() -> None:
     failed = [c.check for c in output.checks if not c.passed]
     assert failed == ["foreign_key_absent", "foreign_key_present", "unique_present"]
     assert output.verified is False
+
+
+ADDED_CK = ConstraintRef("check", "event", "ck_event_1a2b3c4d")
+DROPPED_CK = ConstraintRef("check", "event", "ck_event_5e6f7a8b")
+CHECK_SUMMARY = ChangelogSummary(
+    LOGICAL,
+    ("20261017-153000-01", "20261017-153000-02"),
+    (),
+    (),
+    constraints=(ADDED_CK,),
+    dropped_constraints=(DROPPED_CK,),
+)
+
+
+def test_check_constraints_are_verified_after_return() -> None:
+    db = FakeDatabase(summary=CHECK_SUMMARY)
+    db.apply_attempt(2)
+
+    def restoring(changelog: str, database: TargetDatabase, count: int) -> GatewayResult:
+        db.journal = db.journal[:-count]
+        db.constraints = {("check", "event", "ck_event_5e6f7a8b")}
+        return GatewayResult("req", 0, "", "")
+
+    db.rollback = restoring  # type: ignore[method-assign]
+
+    output, _ = _rollback(db)
+
+    assert [(c.check, c.passed) for c in output.checks[1:]] == [
+        ("check_absent", True),
+        ("check_present", True),
+    ]
+    assert "перечень значений event.ck_event_1a2b3c4d" in output.checks[1].detail
+    assert output.verified is True
