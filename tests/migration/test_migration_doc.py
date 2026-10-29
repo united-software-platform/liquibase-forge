@@ -30,7 +30,9 @@ def _model(text: str) -> DataModel:
     return DataModelFactory().create(reading.draft)
 
 
-@pytest.mark.parametrize("heading", ["Changelog", "Удаления", "Связи и уникальность"])
+@pytest.mark.parametrize(
+    "heading", ["Changelog", "Удаления", "Связи и уникальность", "Генерация значения и перечни"]
+)
 def test_document_changelog_matches_rendering(heading: str) -> None:
     accepted, attempt, changelog = _blocks(heading)
 

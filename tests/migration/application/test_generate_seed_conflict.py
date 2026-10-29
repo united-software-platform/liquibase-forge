@@ -154,3 +154,30 @@ def test_unreadable_accepted_seed(tmp_path: Path) -> None:
 
     with pytest.raises(AcceptedSeedError):
         _run(tmp_path, _status(), seed=None)
+
+
+def test_narrowed_check_violated_by_seed(tmp_path: Path) -> None:
+    attempt = _status().replace("length: 32}", "length: 32, check: [draft, archived]}")
+
+    output = _run(tmp_path, attempt)
+
+    assert output.generated is False
+    assert _kinds(output) == [("check_violated_by_seed", "order_status", "code")]
+    assert output.seed_conflict[0].path == "tables[0].rows[1].code"
+
+
+def test_check_matching_seed_is_not_a_conflict(tmp_path: Path) -> None:
+    attempt = _status().replace("length: 32}", "length: 32, check: [draft, paid]}")
+
+    output = _run(tmp_path, attempt)
+
+    assert (output.generated, output.seed_conflict) == (True, ())
+
+
+def test_generated_column_in_seeded_table_needs_values(tmp_path: Path) -> None:
+    extra = "      - {name: seq_no, type: integer, generated: identity}\n"
+
+    output = _run(tmp_path, _status(extra=extra))
+
+    assert output.generated is False
+    assert set(_kinds(output)) == {("not_null_column_added", "order_status", "seq_no")}

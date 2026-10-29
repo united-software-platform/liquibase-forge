@@ -103,9 +103,10 @@ seed — в [seed-format.md](./seed-format.md), changelog данных и отк
 | Вид `seed_conflict` | Модель попытки |
 |---------------------|----------------|
 | `seeded_table_dropped` | Удаляет таблицу принятого seed |
-| `not_null_column_added` | Добавляет колонку NOT NULL в таблицу с seed-строками; у таблицы с `rows: []` конфликта нет |
+| `not_null_column_added` | Добавляет колонку NOT NULL в таблицу с seed-строками, в том числе колонку с генерацией значения; у таблицы с `rows: []` конфликта нет |
 | `foreign_key_violated_by_seed` | Добавляет внешний ключ, которому строки seed не отвечают, в том числе ключ на таблицу вне seed |
 | `unique_violated_by_seed` | Добавляет набор `unique`, который строки seed повторяют |
+| `check_violated_by_seed` | Добавляет перечень значений `check` или меняет его так, что значение строки seed в него не входит; конфликт называет колонку |
 
 Конфликт снимается операцией seed, выполненной первой: она правит строки, а затем операция
 модели проходит проверку.
@@ -420,3 +421,4 @@ stateDiagram-v2
 | 1.0.6 | 2026-10-22 | LBFR-016, OpenSpec change `add-forge-installer` | Claude Code | Claude Opus 5.5 | Команды `forge` из беклогов выполняются обёрткой `sh tools/forge-env/forge.sh …` вместо прямого запуска через `uv run`: в установленном проекте CLI лежит в uv-подпроекте `tools/forge/` |
 | 1.0.7 | 2026-10-23 | LBFR-022, OpenSpec change `add-operation-abandon` | Claude Code | Claude Opus 5.5 | Отказ от открытой операции: ключ навыка `--abandon`, статус `abandoned` на диаграмме и среди закрытых, `stop_reason` как причина прекращения исполнения, строка `forge abandon` в таблице команд, подраздел «Отказ от операции» — порядок откатов и исход, отчёт и `commit.files` для `abandoned`, шаблон `forge-model` 1.2.1, ограничения об отказе только от открытой операции и об одной сессии |
 | 1.0.8 | 2026-10-25 | LBFR-028, OpenSpec change `add-seed-operation` | Claude Code | Claude Opus 5.5 | Операция seed: раздел «Операция seed» — вид `kind`, след и шаблоны `forge-seed`/`forge-seed-apply`, ключи навыка `--seed` и `--from` с полем `sources`, одна открытая операция на оба вида, удаления строк; подраздел «Согласование с принятым seed» — проверка `seed_conflict` в `forge generate` и правка принятого seed закрытием операции модели. `forge status --latest` ищет в обоих следах; принятие seed в общий `master.yaml` и строка `seed_adjusted`; отчёт называет `kind`, `seed`, счётчики `rows` и удалённые строки в `destructive`; `commit.files` операции seed и `seed.yaml` операции модели; шаблоны seed 1.0.0 и сверка пар шаблонов; ограничения о колонке NOT NULL в справочнике и о раздельных операциях модели и seed |
+| 1.0.9 | 2026-10-29 | LBFR-031, OpenSpec change `add-column-identity-and-check` | Claude Code | Claude Opus 5.5 | В перечень видов `seed_conflict` добавлен `check_violated_by_seed`; у `not_null_column_added` названа колонка с генерацией значения |

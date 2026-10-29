@@ -370,3 +370,37 @@ def test_non_utf8_file_is_unreadable(tmp_path: Path) -> None:
 
     with pytest.raises(ModelUnreadableError):
         YamlModelDraftReader().read(str(path))
+
+
+def test_generated_and_check_are_read_into_draft() -> None:
+    reading = parse_model(
+        _column("name: source\ntype: string\nlength: 16\ncheck: [collector, manual]").replace(
+            "type: bigint\n", "type: bigint\n        generated: identity\n", 1
+        )
+    )
+
+    assert reading.violations == ()
+    assert reading.draft.tables[0].columns == (
+        ColumnDraft("id", "bigint", generated="identity"),
+        ColumnDraft("source", "string", length=16, check=("collector", "manual")),
+    )
+
+
+def test_check_values_keep_their_yaml_kind() -> None:
+    reading = parse_model(_column("name: level\ntype: integer\ncheck: [1, '2', true, 1.5, null]"))
+
+    assert reading.violations == ()
+    assert reading.draft.tables[0].columns[1].check == (1, "2", True, 1.5, None)
+
+
+@pytest.mark.parametrize(
+    ("body", "path"),
+    [
+        ("name: id2\ntype: bigint\ngenerated: true", "tables[0].columns[1].generated"),
+        ("name: source\ntype: text\ncheck: manual", "tables[0].columns[1].check"),
+        ("name: source\ntype: text\ncheck: [a, [b]]", "tables[0].columns[1].check[1]"),
+        ("name: source\ntype: text\ncheck: [a, {b: c}]", "tables[0].columns[1].check[1]"),
+    ],
+)
+def test_generated_and_check_wrong_kind(body: str, path: str) -> None:
+    assert _violations(_column(body)) == [(path, "wrong_kind")]

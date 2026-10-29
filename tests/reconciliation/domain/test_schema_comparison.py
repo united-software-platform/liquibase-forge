@@ -2,7 +2,15 @@
 
 from __future__ import annotations
 
-from forge.reconciliation.domain.actual_schema import ActualColumn, ActualForeignKey, ActualTable
+import pytest
+
+from forge.modeling.domain.column_type import parse_column_type
+from forge.reconciliation.domain.actual_schema import (
+    ActualCheck,
+    ActualColumn,
+    ActualForeignKey,
+    ActualTable,
+)
 from forge.reconciliation.domain.schema_comparison import SchemaComparison
 from tests.migration.models import CUSTOMER, INVOICE, model
 from tests.reconciliation.schemas import column, customer, schema
@@ -208,3 +216,96 @@ def test_constraint_comparison_is_stable() -> None:
     tables = (_linked_customer(("code",)), _invoice(ActualForeignKey(("id",), "x", ("y",))))
 
     assert _linked(*tables) == _linked(*tables)
+
+
+EVENT_MODEL = """
+  - name: event
+    columns:
+      - {name: id, type: bigint, generated: identity}
+      - {name: source, type: text, check: [collector, manual]}
+      - {name: priority, type: integer, check: [1, 2]}
+    primary_key: [id]
+"""
+SOURCE = ActualCheck("CHECK (...)", "source", frozenset({"manual", "collector"}))
+PRIORITY = ActualCheck("CHECK (...)", "priority", frozenset({2, 1}))
+
+
+def _event(*checks: ActualCheck, generated: str | None = "identity") -> ActualTable:
+    columns = (
+        ActualColumn("id", parse_column_type("bigint"), "bigint", False, generated),
+        column("source", "text"),
+        column("priority", "integer"),
+    )
+    return ActualTable("event", columns, ("id",), checks=checks)
+
+
+def _events(table: ActualTable) -> list[tuple[str, ...]]:
+    return _found(table, tables_of_model=EVENT_MODEL)
+
+
+def test_matching_generation_and_checks() -> None:
+    assert _events(_event(PRIORITY, SOURCE)) == []
+
+
+@pytest.mark.parametrize(
+    ("generated", "expected", "actual"),
+    [(None, "identity", "absent"), ("identity_always", "identity", "identity_always")],
+)
+def test_generation_mismatch(generated: str | None, expected: str, actual: str) -> None:
+    assert _events(_event(SOURCE, PRIORITY, generated=generated)) == [
+        ("column_generated_mismatch", "event", "id", expected, actual)
+    ]
+
+
+def test_unexpected_generation() -> None:
+    table = ActualTable(
+        "customer",
+        (
+            ActualColumn("id", parse_column_type("uuid"), "uuid", False, "identity"),
+            column("email", "string", nullable=False, length=255),
+        ),
+        ("id",),
+    )
+
+    assert _found(table) == [("column_generated_mismatch", "customer", "id", "absent", "identity")]
+
+
+def test_check_missing_and_other_values() -> None:
+    wider = ActualCheck("CHECK (...)", "source", frozenset({"collector", "manual", "import"}))
+
+    assert _events(_event(wider)) == [
+        ("check_missing", "event", "source", "[collector, manual]", "absent"),
+        ("check_missing", "event", "priority", "[1, 2]", "absent"),
+        ("check_unexpected", "event", "source", "absent", "[collector, import, manual]"),
+    ]
+
+
+def test_unrecognized_check_is_unexpected() -> None:
+    expression = ActualCheck("CHECK ((priority > 0))")
+
+    assert _events(_event(SOURCE, PRIORITY, expression)) == [
+        ("check_unexpected", "event", "", "absent", "CHECK ((priority > 0))")
+    ]
+
+
+def test_value_kind_matters() -> None:
+    as_text = ActualCheck("CHECK (...)", "priority", frozenset({"1", "2"}))
+
+    assert [kind for kind, *_ in _events(_event(SOURCE, as_text))] == [
+        "check_missing",
+        "check_unexpected",
+    ]
+
+
+def test_checks_go_between_unique_and_foreign_keys() -> None:
+    linked = EVENT_MODEL.replace(
+        "    primary_key: [id]",
+        "      - {name: parent_id, type: bigint}\n    primary_key: [id]\n    unique: [[source]]\n"
+        "    foreign_keys:\n"
+        "      - {columns: [parent_id], references: {table: event, columns: [id]}}",
+    )
+    table = ActualTable("event", (*_event().columns, column("parent_id", "bigint")), ("id",))
+
+    kinds = [kind for kind, *_ in _found(table, tables_of_model=linked)]
+
+    assert kinds == ["unique_missing", "check_missing", "check_missing", "foreign_key_missing"]
