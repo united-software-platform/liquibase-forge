@@ -13,23 +13,47 @@ import pytest
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 LEGACY = PROJECT_ROOT / "tests" / "fixtures" / "operation" / "forge-model-1.0.0.md"
 STAMP = "20261017-153000"
+PLUGIN = PROJECT_ROOT / "plugins" / "forge-plugin"
+TEMPLATES = PLUGIN / "skills" / "forge" / "templates"
+# Каталоги кеша плагина backlog в харнесах: CLI из кеша узнаёт каталог поставки
+# только через BACKLOG_HOME
+CACHES = (
+    "~/.zcode/cli/plugins/cache/formular/backlog/*",
+    "~/.claude/plugins/cache/formular/backlog/*",
+)
+
+
+def _version_key(path: str) -> tuple[int, ...]:
+    try:
+        return tuple(int(part) for part in Path(path).name.split("."))
+    except ValueError:
+        return ()
+
+
+def _cached_delivery() -> str | None:
+    """Каталог поставки плагина в кешах харнесов, наибольшая версия."""
+    found = [
+        path
+        for pattern in CACHES
+        for path in glob.glob(os.path.expanduser(pattern))
+        if os.path.isfile(os.path.join(path, "bin", "backlog"))
+    ]
+    return max(found, key=_version_key) if found else None
 
 
 def backlog_cli() -> str:
-    """Путь к `backlog` плагина `formular`; без плагина тест пропускается."""
-    found = shutil.which("backlog") or next(
-        iter(
-            sorted(
-                glob.glob(
-                    os.path.expanduser("~/.claude/plugins/cache/formular/backlog/*/bin/backlog")
-                ),
-                reverse=True,
-            )
-        ),
-        None,
+    """Путь к `backlog` плагина `formular`; без плагина тест пропускается.
+
+    CLI из кеша харнеса не находит каталог поставки сам: `BACKLOG_HOME` задаётся здесь.
+    """
+    delivery = _cached_delivery()
+    found = shutil.which("backlog") or (
+        os.path.join(delivery, "bin", "backlog") if delivery else None
     )
     if found is None:
         pytest.skip("плагин backlog@formular не установлен: команда backlog не найдена")
+    if delivery and not os.environ.get("BACKLOG_HOME"):
+        os.environ["BACKLOG_HOME"] = delivery
     return found
 
 
@@ -45,7 +69,10 @@ def generate(root: Path, stamp: str = STAMP, auto: bool = True, allow_drop: bool
             "--flag" if auto else "--no-flag", "auto",
             "--flag" if allow_drop else "--no-flag", "allow-drop",
             "--root", str(root),
-            "--templates", str(PROJECT_ROOT / "templates"),
+            "--templates",
+            str(TEMPLATES),
+            "--value",
+            f"templates={TEMPLATES}",
         ],
         check=True,
         capture_output=True,

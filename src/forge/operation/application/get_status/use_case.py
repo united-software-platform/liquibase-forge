@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from forge.operation.application.environment import EnvironmentProbeInterface
 from forge.operation.application.get_status.input import GetStatusInput
 from forge.operation.application.get_status.output import GetStatusOutput
 from forge.operation.application.operation_reading import (
@@ -14,6 +13,7 @@ from forge.operation.application.operation_reading import (
 from forge.operation.application.restore import restore
 from forge.operation.application.views import OperationView, operation_view
 from forge.operation.domain.factory import OperationFactory
+from forge.shared.application.environment import EnvironmentProbeInterface
 
 
 class GetStatusUseCaseInterface(Protocol):

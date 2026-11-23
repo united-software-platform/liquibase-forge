@@ -1,15 +1,19 @@
-"""Проверка среды на `lbfr-db-test` и настоящем раннере."""
+"""Проверка среды на сервере тестов с настоящим Liquibase."""
 
 from __future__ import annotations
 
-import os
+from pathlib import Path
 
 import pytest
 
-from forge.operation.infrastructure.environment_probe import EnvironmentProbe
+from forge.operation.infrastructure.environment_probe import EnvironmentCheck, EnvironmentProbe
+from forge.shared.domain.target_database import TargetDatabase, parse_allowlist
 from tests.conftest import TestDatabase
+from tests.integration.migration_support import PROJECT_ROOT
 
-pytestmark = [pytest.mark.integration, pytest.mark.usefixtures("runner_configured")]
+PASSED = {"database": True, "allowlist": True, "liquibase": True, "accepted": True}
+
+pytestmark = [pytest.mark.integration, pytest.mark.usefixtures("liquibase_ready")]
 
 
 def _environment(database: TestDatabase, **overrides: str) -> dict[str, str]:
@@ -19,43 +23,37 @@ def _environment(database: TestDatabase, **overrides: str) -> dict[str, str]:
         "FORGE_DB_NAME": database.name,
         "FORGE_DB_USER": database.user,
         "FORGE_DB_PASSWORD": database.password,
-        "FORGE_TEST_DB_ALLOWLIST": f"{database.host}:{database.port}/*",
-        "AGENT_RUNNER_URL": os.environ["AGENT_RUNNER_URL"],
-        "AGENT_RUNNER_TOKEN": os.environ["AGENT_RUNNER_TOKEN"],
+        "FORGE_TEST_DB_ALLOWLIST": f"{database.host}:{database.port}/t_*",
     }
     return {**env, **overrides}
 
 
-def _passed(env: dict[str, str]) -> dict[str, bool]:
-    return {check.name: check.passed for check in EnvironmentProbe(env).check()}
+def _checks(env: dict[str, str], project: Path = PROJECT_ROOT) -> dict[str, EnvironmentCheck]:
+    return {check.name: check for check in EnvironmentProbe(env, project).check()}
 
 
 def test_all_checks_pass(test_database: TestDatabase) -> None:
-    assert _passed(_environment(test_database)) == {
-        "database": True,
-        "allowlist": True,
-        "runner": True,
-        "accepted": True,
-    }
+    checks = _checks(_environment(test_database))
+
+    assert {name: check.passed for name, check in checks.items()} == PASSED
+    assert "Liquibase " in checks["liquibase"].detail
 
 
 def test_database_outside_allowlist(test_database: TestDatabase) -> None:
-    env = _environment(test_database, FORGE_TEST_DB_ALLOWLIST="lbfr-db:5432/forge")
+    env = _environment(test_database, FORGE_TEST_DB_ALLOWLIST="localhost:5432/lbfr_forge")
 
-    assert _passed(env) == {
-        "database": True,
+    assert {name: check.passed for name, check in _checks(env).items()} == {
+        **PASSED,
         "allowlist": False,
-        "runner": True,
-        "accepted": True,
     }
 
 
-def test_wrong_runner_token(test_database: TestDatabase) -> None:
-    env = _environment(test_database, AGENT_RUNNER_TOKEN="wrong-token")
+def test_prefix_admits_only_test_databases(test_database: TestDatabase) -> None:
+    """Шаблон `t_*` пропускает базы тестов и не пускает соседние базы общего экземпляра."""
+    env = _environment(test_database)
+    allowlist = parse_allowlist(env["FORGE_TEST_DB_ALLOWLIST"])
 
-    assert _passed(env) == {
-        "database": True,
-        "allowlist": True,
-        "runner": False,
-        "accepted": True,
-    }
+    assert allowlist.admits(
+        TargetDatabase(test_database.host, test_database.port, test_database.name)
+    )
+    assert not allowlist.admits(TargetDatabase(test_database.host, test_database.port, "shop"))

@@ -1,0 +1,9 @@
+{
+  "name": "forge-plugin",
+  "version": "0.5.0",
+  "description": "Навык Liquibase Forge: модель данных PostgreSQL и наполнение справочников по намерению LLM — беклог операции formular с накатом, сверкой и откатом",
+  "author": {
+    "name": "Alexey Gaybovich"
+  },
+  "skills": "./skills"
+}

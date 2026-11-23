@@ -1,4 +1,4 @@
-"""Общие фикстуры тестов: отдельная БД на каждый интеграционный тест в `lbfr-db-test`."""
+"""Общие фикстуры тестов: отдельная БД на каждый интеграционный тест на сервере тестов."""
 
 from __future__ import annotations
 
@@ -13,10 +13,12 @@ import pytest
 from psycopg import sql
 from psycopg.conninfo import make_conninfo
 
+from forge.shared.infrastructure.settings import DEFAULT_HOST, server_port
+
 
 @dataclass(frozen=True)
 class TestDatabase:
-    """БД интеграционного теста на сервере `lbfr-db-test`."""
+    """БД интеграционного теста на сервере тестов — общем экземпляре PostgreSQL workspace."""
 
     __test__ = False  # не тестовый класс, несмотря на префикс имени
 
@@ -50,18 +52,24 @@ def environment_missing(reason: str) -> NoReturn:
 
 
 def _server() -> TestDatabase:
-    """Служебная БД сервера `lbfr-db-test`, из которой создаются и удаляются БД тестов."""
-    host = os.environ.get("FORGE_TEST_DB_HOST", "")
-    if not host:
+    """Служебная БД сервера тестов, из которой создаются и удаляются БД тестов.
+
+    Адрес — как у целевой БД: хост по умолчанию `localhost`, порт — `PG_PORT` каскада mise,
+    иначе `5432`. Признак настроенного сервера — учётные данные: роль должна уметь создавать базы.
+    """
+    user = os.environ.get("FORGE_TEST_DB_USER", "")
+    password = os.environ.get("FORGE_TEST_DB_PASSWORD", "")
+    if not user or not password:
         environment_missing(
-            "FORGE_TEST_DB_HOST не задан: сервер БД интеграционных тестов не настроен"
+            "FORGE_TEST_DB_USER или FORGE_TEST_DB_PASSWORD не заданы: "
+            "сервер БД интеграционных тестов не настроен"
         )
     return TestDatabase(
-        host=host,
-        port=int(os.environ.get("FORGE_TEST_DB_PORT", "5432")),
+        host=os.environ.get("FORGE_TEST_DB_HOST", "").strip() or DEFAULT_HOST,
+        port=int(os.environ.get("FORGE_TEST_DB_PORT", "").strip() or server_port(os.environ)),
         name=os.environ.get("FORGE_TEST_DB_NAME", "postgres"),
-        user=os.environ.get("FORGE_TEST_DB_USER", ""),
-        password=os.environ.get("FORGE_TEST_DB_PASSWORD", ""),
+        user=user,
+        password=password,
     )
 
 

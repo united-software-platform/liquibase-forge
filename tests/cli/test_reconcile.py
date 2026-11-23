@@ -135,7 +135,7 @@ def test_database_outside_allowlist(
         "FORGE_DB_NAME": "forge",
         "FORGE_DB_USER": "forge",
         "FORGE_DB_PASSWORD": "secret",
-        "FORGE_TEST_DB_ALLOWLIST": "lbfr-db:5432/forge",
+        "FORGE_TEST_DB_ALLOWLIST": "other-db:5432/forge",
     }.items():
         monkeypatch.setenv(name, value)
 

@@ -613,22 +613,22 @@ forge generate --model <модель попытки> [--accepted <принята
 forge apply --changelog <каталог попытки>/changelog.yaml
 ```
 
-Агент работает без Docker и Liquibase, поэтому накат идёт через шлюз на хосте:
+CLI работает на хосту сам, и накат идёт шлюзом Liquibase в его процессе:
 
-1. Команда берёт адрес целевой БД из `FORGE_DB_HOST`, `FORGE_DB_PORT`, `FORGE_DB_NAME`
-   и проверяет его по `FORGE_TEST_DB_ALLOWLIST`. БД вне перечня отклоняется до обращения
-   к раннеру.
-1. Команда пишет запрос `.forge/liquibase-request.json` и вызывает цель раннера
-   `liquibase-update`. Шлюз повторно проверяет перечень и запускает Liquibase в контейнере
-   `lbfr-liquibase`.
-1. Команда читает `.forge/liquibase-result.json` и принимает его, только если идентификатор
-   запроса совпадает.
+1. Команда берёт адрес целевой БД из `FORGE_DB_HOST`, `FORGE_DB_PORT`, `FORGE_DB_NAME` — хост
+   по умолчанию `localhost`, порт — `PG_PORT` каскада mise, иначе `5432`, — и проверяет его
+   по `FORGE_TEST_DB_ALLOWLIST`. БД вне перечня отклоняется до запуска Liquibase.
+1. Шлюз проверяет, что changelog лежит внутри корня проекта, и запускает нативный Liquibase
+   с драйвером PostgreSQL из `.forge/lib/`. Адрес и учётные данные БД уходят Liquibase
+   окружением, а не аргументами процесса.
+1. Процесс Liquibase работает с рабочим каталогом вне проекта и читает проект через search path:
+   записать в проект относительным путём он не может.
 
 | Код | Когда | `apply.json` |
 |-----|-------|--------------|
 | `0` | Liquibase выполнил накат | Записан |
 | `1` | Liquibase завершился ошибкой; диагностика продублирована в stderr | Записан |
-| `2` | Переменные окружения не заданы, БД вне перечня, раннер недоступен, шлюз отказал, результат не прочитан или относится к другому запросу | Не записан |
+| `2` | Переменные окружения не заданы, БД вне перечня, Liquibase или драйвер недоступны, changelog вне проекта | Не записан |
 
 `apply.json` лежит рядом с changelog. В нём путь changelog, адрес БД, `request_id`, код исхода,
 вывод и диагностика Liquibase. При коде `2` файла нет намеренно: беклог попытки по его наличию
@@ -638,7 +638,7 @@ forge apply --changelog <каталог попытки>/changelog.yaml
 могли примениться не все; откат снимает ровно применённые.
 
 Вид ошибки в ответе с кодом `2`: `settings_unavailable`, `database_not_allowed`,
-`runner_unavailable`, `gateway_refused`, `gateway_result_invalid`.
+`liquibase_unavailable`, `gateway_refused`.
 
 ---
 
@@ -685,7 +685,7 @@ flowchart TD
 |-----|-------|
 | `0` | Возврат подтверждён, откатывать было нечего, или вердикт `success` |
 | `1` | Возврат не подтверждён: проверка или накат принятого состояния не прошли |
-| `2` | Нет беклога операции, переменные окружения не заданы, БД вне перечня, БД или раннер недоступны, шлюз отказал |
+| `2` | Нет беклога операции, переменные окружения не заданы, БД вне перечня, БД или Liquibase недоступны, шлюз отказал |
 
 `rollback.json` пишется в каталог попытки. В нём номер попытки и вердикт, действие (`none_applied`,
 `liquibase_rollback` или `recreate_database`), число откатанных changeset, результат шлюза,
@@ -766,9 +766,11 @@ changelog данных — в [seed-migration.md](./seed-migration.md).
 - **Допущение:** схема целевой БД полностью управляется Liquibase, а принятая модель описывает её
   состояние.
 - **Ограничение:** корень проекта — текущий каталог: команды вызываются из корня, иначе шлюз
-  не найдёт changelog, а команда — файл результата.
-- **Ограничение:** файлы `.forge/` общие, раннер однопоточный, поэтому команды `forge apply`
-  и `forge rollback` не запускаются параллельно.
+  не найдёт changelog и драйвер в `.forge/lib/`.
+- **Ограничение:** накату нужен нативный Liquibase в `PATH` и драйвер PostgreSQL в `.forge/lib/`;
+  без них команда возвращает код `2` с видом `liquibase_unavailable`.
+- **Ограничение:** команды `forge apply` и `forge rollback` одной операции не запускаются
+  параллельно: они меняют одну целевую БД и один след попытки.
 - **Риск:** Liquibase может перевести имя типа иначе, чем ожидается → интеграционный тест
   сравнивает фактические типы колонок с таблицей отображения.
 
@@ -785,3 +787,4 @@ changelog данных — в [seed-migration.md](./seed-migration.md).
 | 1.0.4 | 2026-10-23 | LBFR-022, OpenSpec change `add-operation-abandon` | Claude Code | Claude Opus 5.5 | Раздел «Откат»: исключение для вердикта `success` при отказе от операции — `forge abandon` откатывает подтверждённую попытку с проверкой возврата и записью `rollback.json`, у `forge rollback` такого ключа нет |
 | 1.0.5 | 2026-10-24 | LBFR-028, OpenSpec change `add-seed-migration` | Claude Code | Claude Opus 5.5 | Changelog данных `forge generate-seed`: в разделе «Откат» — откат changeset данных тем же `rollback-count` по явным блокам `rollback`; в разделе «Проверка возврата» — проверки строк `row_absent`, `row_present`, `row_restored` запросом `count(*)` с `IS NOT DISTINCT FROM` по литералам changelog попытки, возврат строк на запасном пути; добавлены ссылки на `seed-migration.md` |
 | 1.0.6 | 2026-10-29 | LBFR-031, OpenSpec change `add-column-identity-and-check` | Claude Code | Claude Opus 5.5 | Раздел «Генерация значения и перечни» с примером моделей и changelog: `autoIncrement` и `generationType: BY DEFAULT` у колонки с генерацией, перечень — changeset `sql` с явным откатом, имя `ck_<таблица>_<hash8>`, тождество, порядок, разбор сводки; порядок групп changeset — десять групп; NOT NULL колонки с генерацией; неподдерживаемое изменение `column_generated_changed`; виды `add_check` и `drop_check` с колонкой в ответе `forge generate`; проверки возврата `check_absent` и `check_present`; ограничения и риск наката перечня на данные |
+| 1.0.7 | 2026-11-23 | LBFR-032, OpenSpec change `replace-kit-with-tessera-and-mise` | ZCode | GLM-5.4 | Накат идёт шлюзом Liquibase в процессе CLI: файлы обмена и раннер ушли, адрес БД по умолчанию — `localhost` и порт каскада mise; виды ошибки кода `2` — `liquibase_unavailable` вместо `runner_unavailable`, без `gateway_result_invalid`; в откате и ограничениях раннер заменён нативным Liquibase с драйвером в `.forge/lib/` |

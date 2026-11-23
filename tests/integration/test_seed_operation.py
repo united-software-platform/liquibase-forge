@@ -1,4 +1,4 @@
-"""Операция seed на `lbfr-db-test`: цикл попыток, закрытие, общий `master.yaml` и отказ.
+"""Операция seed на сервере тестов: цикл попыток, закрытие, общий `master.yaml` и отказ.
 
 Беклог операции несёт фронтматтер шаблона `forge-seed`; команды каждой попытки — те, что называет
 шаблон `forge-seed-apply`: `validate-seed`, `generate-seed`, `apply`, `reconcile-seed`, а при
@@ -19,7 +19,7 @@ from tests.integration.migration_support import forge, write_model
 from tests.migration.operation_backlog import write_operation
 from tests.operation.backlogs import set_values
 
-pytestmark = [pytest.mark.integration, pytest.mark.usefixtures("runner_configured")]
+pytestmark = [pytest.mark.integration, pytest.mark.usefixtures("liquibase_ready")]
 
 MODEL_STAMP, SEED_STAMP = "20261024-120000", "20261025-101500"
 

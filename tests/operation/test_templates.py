@@ -16,7 +16,7 @@ import yaml
 
 from tests.operation.backlogs import PROJECT_ROOT, backlog_cli, generate
 
-TEMPLATES = PROJECT_ROOT / "templates"
+TEMPLATES = PROJECT_ROOT / "plugins" / "forge-plugin" / "skills" / "forge" / "templates"
 VARIANTS = [
     (auto, first, drop)
     for auto in (True, False)
@@ -177,11 +177,27 @@ def _seed_backlog(root: Path, sources: str = "[]", auto: bool = True) -> str:
             "--no-flag", "allow-drop",
             "--root", str(root),
             "--templates", str(TEMPLATES),
+            "--value", f"templates={TEMPLATES}",
         ],
         check=True,
         capture_output=True,
     )  # fmt: skip
     return (root / "forge-seed" / "20261025-101500" / "tasks.md").read_text(encoding="utf-8")
+
+
+def test_operation_backlogs_pass_plugin_templates_to_attempts(tmp_path: Path) -> None:
+    """Беклог операции порождает беклоги попыток каталогом шаблонов плагина.
+
+    Агент исполняет команды беклога отдельными вызовами: переменная окружения между ними не живёт,
+    поэтому каталог обязан стоять в самой команде и во фронтматтере операции.
+    """
+    model = generate(tmp_path).read_text(encoding="utf-8")
+    seed = _seed_backlog(tmp_path)
+
+    for text in (model, seed):
+        assert f'templates: "{TEMPLATES}"' in text
+        assert text.count(f'--templates "{TEMPLATES}"`') == 3
+        assert "{{templates}}" not in text
 
 
 def _seed_attempt_backlog(root: Path, auto: bool, first: bool, drop: bool) -> str:

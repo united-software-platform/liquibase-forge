@@ -13,7 +13,7 @@ from tests.integration.migration_support import forge, write_model
 from tests.migration.models import CUSTOMER, INVOICE
 from tests.migration.operation_backlog import write_operation
 
-pytestmark = [pytest.mark.integration, pytest.mark.usefixtures("runner_configured")]
+pytestmark = [pytest.mark.integration, pytest.mark.usefixtures("liquibase_ready")]
 
 FIRST, SECOND = "20261017-153000", "20261018-090000"
 

@@ -1,4 +1,4 @@
-"""Откат попытки через раннер на `lbfr-db-test`: полный, частичный и запасной путь."""
+"""Откат попытки с нативным Liquibase на сервере тестов: полный, частичный и запасной путь."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from tests.conftest import TestDatabase
 from tests.integration.migration_support import STAMP, forge
 from tests.migration.operation_backlog import write_operation
 
-pytestmark = [pytest.mark.integration, pytest.mark.usefixtures("runner_configured")]
+pytestmark = [pytest.mark.integration, pytest.mark.usefixtures("liquibase_ready")]
 
 EXAMPLE = Path(__file__).resolve().parents[1] / "fixtures" / "model" / "example.yaml"
 LOGICAL = f"db/changelog/{STAMP}.yaml"

@@ -1,98 +1,150 @@
-"""Сквозная проверка шлюза Liquibase: агент пишет запрос, раннер на хосте исполняет цель.
+"""Сквозная проверка шлюза Liquibase: накат и откат настоящим Liquibase на сервере тестов.
 
-Нужны раннер (`AGENT_RUNNER_URL`, `AGENT_RUNNER_TOKEN`) и сервер `lbfr-db-test`; без них
-тесты пропускаются с причиной, а при `FORGE_REQUIRE_INTEGRATION=1` падают.
+Нужны нативный Liquibase с драйвером и сервер тестов; без них тесты пропускаются с причиной,
+а при `FORGE_REQUIRE_INTEGRATION=1` падают.
 """
 
 from __future__ import annotations
 
-import json
+import hashlib
 import os
-import urllib.request
-import uuid
 from pathlib import Path
-from typing import Any
 
 import psycopg
 import pytest
 
-from tests.conftest import TestDatabase, environment_missing
+from forge.migration.application.apply_changelog.input import ApplyChangelogInput
+from forge.migration.application.apply_changelog.use_case import ApplyChangelogUseCase
+from forge.migration.infrastructure.liquibase_gateway import ProcessLiquibaseGateway
+from forge.shared.domain.target_database import DatabaseNotAllowedError, TargetDatabase
+from forge.shared.infrastructure.json_result_writer import JsonResultWriter
+from forge.shared.infrastructure.settings import EnvironmentSettings
+from tests.conftest import TestDatabase
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-REQUEST_PATH = PROJECT_ROOT / ".forge" / "liquibase-request.json"
-RESULT_PATH = PROJECT_ROOT / ".forge" / "liquibase-result.json"
 CHANGELOG = "tests/fixtures/liquibase/gateway-probe.yaml"
-
-pytestmark = pytest.mark.integration
-
-
-@pytest.fixture
-def runner() -> tuple[str, str]:
-    url = os.environ.get("AGENT_RUNNER_URL", "")
-    token = os.environ.get("AGENT_RUNNER_TOKEN", "")
-    if not url or not token:
-        environment_missing("AGENT_RUNNER_URL или AGENT_RUNNER_TOKEN не заданы: раннер не настроен")
-    return url, token
-
-
-def _call_gateway(runner: tuple[str, str], target: str, request: dict[str, Any]) -> Any:
-    """Записать запрос, вызвать цель через раннер и вернуть файл результата."""
-    REQUEST_PATH.parent.mkdir(exist_ok=True)
-    REQUEST_PATH.write_text(json.dumps(request), encoding="utf-8")
-    url, token = runner
-    http_request = urllib.request.Request(f"{url}/run/{target}", headers={"X-Runner-Token": token})
-    with urllib.request.urlopen(http_request, timeout=900) as response:
-        response.read()
-    result = json.loads(RESULT_PATH.read_text(encoding="utf-8"))
-    assert result["request_id"] == request["request_id"], "результат чужого запроса"
-    return result
-
-
-def _request(database: TestDatabase, action: str, **extra: Any) -> dict[str, Any]:
-    return {
-        "request_id": uuid.uuid4().hex,
-        "action": action,
-        "changelog": CHANGELOG,
-        "host": database.host,
-        "port": database.port,
-        "database": database.name,
-        **extra,
+# Каталоги состояния процесса тестов: их содержимое делу не мешает, и Liquibase их не касается
+LOCAL = frozenset(
+    {
+        ".forge",
+        ".git",
+        ".venv",
+        "backlog",
+        "__pycache__",
+        ".pytest_cache",
+        ".mypy_cache",
+        ".ruff_cache",
     }
+)
+
+pytestmark = [pytest.mark.integration, pytest.mark.usefixtures("liquibase_ready")]
+
+
+def _environment(database: TestDatabase, allowlist: str | None = None) -> dict[str, str]:
+    return {
+        "FORGE_DB_HOST": database.host,
+        "FORGE_DB_PORT": str(database.port),
+        "FORGE_DB_NAME": database.name,
+        "FORGE_DB_USER": database.user,
+        "FORGE_DB_PASSWORD": database.password,
+        "FORGE_TEST_DB_ALLOWLIST": allowlist or f"{database.host}:{database.port}/t_*",
+    }
+
+
+def _gateway(
+    database: TestDatabase, allowlist: str | None = None
+) -> tuple[ProcessLiquibaseGateway, EnvironmentSettings]:
+    environment = {**os.environ, **_environment(database, allowlist)}
+    settings = EnvironmentSettings(environment)
+    return ProcessLiquibaseGateway(PROJECT_ROOT, settings, environment), settings
 
 
 def _probe(database: TestDatabase) -> tuple[bool, int]:
     """Есть ли таблица и сколько записей changeset в журнале Liquibase."""
     with psycopg.connect(database.conninfo) as connection:
         table = connection.execute("SELECT to_regclass('public.gateway_probe')").fetchone()
-        journal = connection.execute(
-            "SELECT count(*) FROM databasechangelog WHERE id = 'gateway-probe-01'"
-        ).fetchone()
-    assert table is not None and journal is not None
-    return table[0] is not None, int(journal[0])
+        journal = connection.execute("SELECT to_regclass('public.databasechangelog')").fetchone()
+        assert table is not None and journal is not None
+        recorded = 0
+        if journal[0] is not None:
+            recorded = int(
+                connection.execute(
+                    "SELECT count(*) FROM databasechangelog WHERE id = 'gateway-probe-01'"
+                ).fetchone()[0]
+            )
+    return table[0] is not None, recorded
 
 
-def test_update_then_rollback_one_changeset(
-    runner: tuple[str, str], test_database: TestDatabase
-) -> None:
-    updated = _call_gateway(runner, "liquibase-update", _request(test_database, "update"))
-    assert updated["exit_code"] == 0, updated["stderr"]
+def _tree() -> dict[str, str]:
+    """Снимок файлов проекта: относительный путь — контрольная сумма."""
+    snapshot: dict[str, str] = {}
+    for directory, subdirectories, files in os.walk(PROJECT_ROOT):
+        subdirectories[:] = [name for name in subdirectories if name not in LOCAL]
+        for name in files:
+            path = Path(directory) / name
+            if not path.is_symlink():
+                relative = path.relative_to(PROJECT_ROOT).as_posix()
+                snapshot[relative] = hashlib.sha256(path.read_bytes()).hexdigest()
+    return snapshot
+
+
+def test_update_then_rollback_one_changeset(test_database: TestDatabase) -> None:
+    gateway, settings = _gateway(test_database)
+
+    updated = gateway.update(CHANGELOG, settings.target())
+
+    assert updated.exit_code == 0, updated.stderr
     assert _probe(test_database) == (True, 1)
 
-    rolled_back = _call_gateway(
-        runner, "liquibase-rollback", _request(test_database, "rollback", count=1)
-    )
-    assert rolled_back["exit_code"] == 0, rolled_back["stderr"]
+    rolled_back = gateway.rollback(CHANGELOG, settings.target(), 1)
+
+    assert rolled_back.exit_code == 0, rolled_back.stderr
     assert _probe(test_database) == (False, 0)
 
 
-def test_database_outside_allowlist_is_refused(
-    runner: tuple[str, str], test_database: TestDatabase
+def test_master_with_relative_include_leaves_project_files_alone(
+    test_database: TestDatabase, trail: Path
 ) -> None:
-    request = _request(test_database, "update")
-    request["host"] = os.environ.get("FORGE_DB_HOST", "lbfr-db")
-    request["database"] = "forge_outside_allowlist"
+    """Master-changelog, как его пишет `forge close`: include относительен самому master."""
+    changelogs = trail / "changelog"
+    changelogs.mkdir()
+    probe = (PROJECT_ROOT / CHANGELOG).read_text(encoding="utf-8")
+    (changelogs / "probe.yaml").write_text(probe, encoding="utf-8")
+    master = changelogs / "master.yaml"
+    master.write_text(
+        "databaseChangeLog:\n"
+        "  - include:\n"
+        "      file: probe.yaml\n"
+        "      relativeToChangelogFile: true\n",
+        encoding="utf-8",
+    )
+    gateway, settings = _gateway(test_database)
+    before = _tree()
 
-    result = _call_gateway(runner, "liquibase-update", request)
+    updated = gateway.update(str(master), settings.target())
+    rolled_back = gateway.rollback(str(master), settings.target(), 1)
 
-    assert result["exit_code"] == 2
-    assert "вне перечня тестовых" in result["stderr"]
+    assert updated.exit_code == 0, updated.stderr
+    assert rolled_back.exit_code == 0, rolled_back.stderr
+    assert _probe(test_database) == (False, 0)
+    assert _tree() == before
+
+
+def test_database_outside_allowlist_never_reaches_liquibase(test_database: TestDatabase) -> None:
+    gateway, _ = _gateway(test_database)
+    _, outside = _gateway(test_database, allowlist=f"{test_database.host}:{test_database.port}/x_*")
+    use_case = ApplyChangelogUseCase(outside, gateway, JsonResultWriter())
+
+    with pytest.raises(DatabaseNotAllowedError):
+        use_case.execute(ApplyChangelogInput(CHANGELOG))
+
+    assert _probe(test_database) == (False, 0)
+
+
+def test_target_is_test_database_of_shared_server(test_database: TestDatabase) -> None:
+    """БД теста носит префикс `t_`: так перечень тестовых БД изолирует их на общем экземпляре."""
+    _, settings = _gateway(test_database)
+    target: TargetDatabase = settings.target()
+
+    assert target.name.startswith("t_")
+    settings.allowlist().require(target)

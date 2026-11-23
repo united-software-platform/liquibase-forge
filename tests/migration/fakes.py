@@ -22,12 +22,12 @@ from forge.shared.domain.target_database import (
     parse_allowlist,
 )
 
-TARGET = TargetDatabase("lbfr-db-test", 5432, "t_0001")
+TARGET = TargetDatabase("localhost", 5432, "t_0001")
 
 
 class FakeSettings:
     def __init__(
-        self, allowlist: str = "lbfr-db-test:5432/*", target: TargetDatabase = TARGET
+        self, allowlist: str = "localhost:5432/*", target: TargetDatabase = TARGET
     ) -> None:
         self._allowlist = allowlist
         self._target = target

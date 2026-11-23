@@ -1,4 +1,4 @@
-"""Changelog данных на `lbfr-db-test`: накат всех типов, вторая попытка, откат и запасной путь."""
+"""Changelog данных на сервере тестов: накат всех типов, вторая попытка, откат и запасной путь."""
 
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ from tests.conftest import TestDatabase
 from tests.integration.migration_support import STAMP, forge, write_model
 from tests.migration.operation_backlog import write_operation
 
-pytestmark = [pytest.mark.integration, pytest.mark.usefixtures("runner_configured")]
+pytestmark = [pytest.mark.integration, pytest.mark.usefixtures("liquibase_ready")]
 
 FIRST, SECOND = "20261025-101500", "20261026-090000"
 

@@ -153,7 +153,7 @@ CHECK (((source)::text = 'collector'::text))
 {
   "model": "backlog/forge-model/20261017-153000/attempt-1/model.yaml",
   "changelog": "backlog/forge-model/20261017-153000/attempt-1/changelog.yaml",
-  "database": "lbfr-db:5432/forge",
+  "database": "localhost:5432/forge",
   "verdict": "failure",
   "discrepancies": [
     {
@@ -216,3 +216,4 @@ CHECK (((source)::text = 'collector'::text))
 | 1.0.1 | 2026-10-22 | LBFR-015, OpenSpec change `add-model-relations` | Claude Code | Claude Opus 5.5 | Сверка наборов уникальности и внешних ключей: строки состава сравнения, виды расхождений `unique_missing`, `unique_unexpected`, `foreign_key_missing`, `foreign_key_unexpected`, порядок после первичного ключа, пример `reconcile.json` с `unique_missing`, ограничения — нет уникальных индексов без ограничения, `CHECK` и действий FK |
 | 1.0.2 | 2026-10-25 | LBFR-028, OpenSpec change `add-seed-reconciliation` | Claude Code | Claude Opus 5.5 | В «Ограничения и допущения» добавлено ограничение со ссылкой на сверку строк seed `seed-reconciliation.md`; в раздел «Файл reconcile.json» — оговорка, что поле `key` расхождения в ответе `forge reconcile` не выводится |
 | 1.0.3 | 2026-10-29 | LBFR-031, OpenSpec change `add-column-identity-and-check` | Claude Code | Claude Opus 5.5 | Сверка генерации значения по `attidentity` и перечней значений по колонке и множеству значений: строки состава сравнения, раздел «Распознавание перечня значений» с формами `pg_get_constraintdef`, виды `column_generated_mismatch`, `check_missing`, `check_unexpected`, порядок расхождений; ограничение «`CHECK` не видны» заменено ограничением о нераспознанном `CHECK`, добавлен риск смены записи определения |
+| 1.0.4 | 2026-11-24 | LBFR-032, OpenSpec change `replace-kit-with-tessera-and-mise` | ZCode | GLM-5.4 | адрес базы в примере `reconcile.json` приведён к общему экземпляру PostgreSQL workspace |

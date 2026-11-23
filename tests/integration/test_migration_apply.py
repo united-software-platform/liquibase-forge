@@ -1,4 +1,4 @@
-"""Накат changelog через раннер на `lbfr-db-test`: типы PostgreSQL, NOT NULL, порядок ключа."""
+"""Накат changelog нативным Liquibase: типы PostgreSQL, NOT NULL, порядок ключа."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ import pytest
 from tests.conftest import TestDatabase
 from tests.integration.migration_support import forge
 
-pytestmark = [pytest.mark.integration, pytest.mark.usefixtures("runner_configured")]
+pytestmark = [pytest.mark.integration, pytest.mark.usefixtures("liquibase_ready")]
 
 EXAMPLE = Path(__file__).resolve().parents[1] / "fixtures" / "model" / "example.yaml"
 

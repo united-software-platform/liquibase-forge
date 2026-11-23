@@ -126,14 +126,14 @@ PostgreSQL, а не из changelog.
 
 ## Понятия formular
 
-Понятия беклога принадлежат плагину `formular` и здесь не переопределяются (TERM-001). Текст
-определений выдаёт вызов `backlog norms`: нормы и за ними глоссарий плагина.
+Понятия беклога принадлежат плагину `formular`: здесь они используются, а не переопределяются.
+Текст определений выдаёт вызов `backlog norms`: нормы и за ними глоссарий плагина.
 
 | Понятие | Как используется в Liquibase Forge |
 |---------|------------------------------------|
 | Операция (Operation) | Liquibase Forge вводит четыре операции: `forge-model` — построение модели по намерению, `forge-apply` — её попытка, `forge-seed` — наполнение справочников по намерению, `forge-seed-apply` — её попытка |
 | Беклог операции (Operation Backlog) | Беклог операции — `forge-model` либо `forge-seed`, беклог попытки — `forge-apply` либо `forge-seed-apply` |
-| Шаблон операции (Operation Template) | `templates/forge-model.md`, `templates/forge-apply.md`, `templates/forge-seed.md`, `templates/forge-seed-apply.md` |
+| Шаблон операции (Operation Template) | `plugins/forge-plugin/skills/forge/templates/` — `forge-model.md`, `forge-apply.md`, `forge-seed.md`, `forge-seed-apply.md`: шаблоны лежат в плагине и в проект не копируются |
 | Фронтматтер беклога (Backlog Frontmatter) | Журнал операции и вердикты попыток |
 | Стоп-знак (Stop Sign) | Перед созданием модели или seed, перед накатом, перед закрытием операции — только в режиме `interactive` |
 | Признак исполнения (Completion Marker) | Задачи формулируются как цели; признак проверяется командой CLI `forge` |
@@ -221,3 +221,4 @@ flowchart LR
 | 1.0.6 | 2026-10-24 | LBFR-028, OpenSpec change `add-seed-format` | Claude Code | Claude Opus 5.5 | Добавлен контекст «Наполнение»: в единый язык введены понятия «Справочная таблица (Reference Table)», «Seed (Seed Data)» и «Наполнение (Seeding)» со ссылкой на `seed-format.md`, строка контекста в таблицу ограниченных контекстов, узел и связь «Наполнение → Моделирование» на карте контекстов |
 | 1.0.7 | 2026-10-25 | LBFR-028, OpenSpec change `add-seed-operation` | Claude Code | Claude Opus 5.5 | Операция seed: в единый язык введены понятия «Вид операции (Operation Kind)», «Операция seed (Seed Operation)» и «Принятый seed (Accepted Seed)»; намерение и попытка распространены на операцию seed; в понятиях `formular` названы операции и шаблоны `forge-seed` и `forge-seed-apply`; ключевые понятия контекстов «Операция» и «Наполнение» дополнены |
 | 1.0.8 | 2026-10-29 | LBFR-031, OpenSpec change `add-column-identity-and-check` | Claude Code | Claude Opus 5.5 | В ядро модели данных добавлены понятия «Генерация значения (Value Generation)» и «Перечень значений (Value List)», определение колонки дополнено ими; в изменения схемы добавлены перечни значений и отклонение смены генерации; вне ядра остался только `CHECK` в виде выражения; определение Changelog дополнено ограничениями |
+| 1.0.9 | 2026-11-23 | LBFR-032, OpenSpec change `replace-kit-with-tessera-and-mise` | ZCode | GLM-5.4 | В разделе «Понятия formular» убрана ссылка на код `TERM-001`: правила терминологии нет в плагине tessera, а утверждение о том, что понятия беклога здесь используются и не переопределяются, сохранено; расположение шаблонов операций — каталог плагина, а не `templates/` проекта |

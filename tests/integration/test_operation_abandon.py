@@ -1,4 +1,4 @@
-"""Отказ от операции через раннер на `lbfr-db-test`: схема возвращается к принятому состоянию.
+"""Отказ от операции нативным Liquibase: схема возвращается к принятому состоянию.
 
 Принятое состояние — одна операция с таблицей клиентов. Вторая операция накатывает попытку
 с таблицей счетов, получает вердикт `success` и не закрывается; `forge abandon` её бросает.
@@ -21,7 +21,7 @@ from tests.integration.migration_support import forge, write_model
 from tests.migration.models import CUSTOMER, INVOICE
 from tests.migration.operation_backlog import write_operation
 
-pytestmark = [pytest.mark.integration, pytest.mark.usefixtures("runner_configured")]
+pytestmark = [pytest.mark.integration, pytest.mark.usefixtures("liquibase_ready")]
 
 FIRST, SECOND = "20261016-120000", "20261017-153000"
 

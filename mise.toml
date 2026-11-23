@@ -1,0 +1,59 @@
+# Liquibase Forge: mise — единственный менеджер окружения (ENV-001 плагина tessera).
+# Инструменты, переменные и задачи объявлены здесь; Makefile и Docker Compose не используются.
+
+# Интерпретатор закреплён проектом: под ним проверяются типы и идут проверки CI. uv ставит
+# зависимости по uv.lock. Java и Liquibase нужны шлюзу наката: Liquibase 5.x требует Java 17+.
+[tools]
+python = "3.12"
+uv = "0.12.7"
+java = "temurin-21.0.13.1+2.0.LTS"
+liquibase = "5.0.4"
+
+# Несекретные координаты forge — здесь, секреты — в .env (шаблон .env.example, ENV-005).
+# Значение из этой секции перекрывает .env, поэтому секреты сюда не подставляются.
+# Сервер PostgreSQL — общий экземпляр workspace: его порт каскад mise задаёт переменной PG_PORT.
+# CLI берёт порт из неё по умолчанию сам, поэтому FORGE_DB_PORT здесь не задан, а перечень
+# тестовых БД адресует сервер по этому порту (вне workspace — по умолчанию 5432).
+# Целевая БД и тестовые базы — отдельные базы на общем экземпляре: изоляция проектов — именами,
+# изоляция тестов — префиксом t_ в перечне тестовых БД.
+[env]
+_.file = ".env"
+# CLI forge в репозитории разработки — скрипт окружения uv (создаёт `uv sync`): через PATH он
+# доступен командой `forge …` так же, как установленный CLI в целевом проекте
+_.path = "./.venv/bin"
+FORGE_DB_HOST = "localhost"
+FORGE_DB_NAME = "lbfr_forge"
+FORGE_ACCEPTED_DIR = ".forge/db"
+FORGE_TEST_DB_HOST = "localhost"
+FORGE_TEST_DB_NAME = "postgres"
+FORGE_TEST_DB_ALLOWLIST = "localhost:{{ env.PG_PORT | default(value='5432') }}/lbfr_forge,localhost:{{ env.PG_PORT | default(value='5432') }}/t_*"
+
+# Задачи с префиксом forge- не перекрывают в каскаде задачи общего набора workspace (env-up,
+# env-status). Задачи проверок повторяет workflow checks — состав сверяет тест репозитория.
+[tasks.forge]
+description = "CLI forge: mise run forge -- <аргументы>"
+run = "uv run forge"
+
+[tasks.forge-env-up]
+description = "Подготовить среду: целевая БД на сервере PostgreSQL и драйвер Liquibase"
+run = "uv run forge env up"
+
+[tasks.forge-env-check]
+description = "Проверить среду: БД, перечень тестовых БД, Liquibase с драйвером, корень принятого состояния"
+run = "uv run forge env check"
+
+[tasks.lint]
+description = "Линтер ruff"
+run = "uv run ruff check"
+
+[tasks.format-check]
+description = "Проверка форматирования ruff"
+run = "uv run ruff format --check"
+
+[tasks.types]
+description = "Проверка типов mypy"
+run = "uv run mypy src"
+
+[tasks.test]
+description = "Тесты pytest"
+run = "uv run pytest"

@@ -1,43 +1,53 @@
-"""Проверка тестовой среды: целевая БД, перечень тестовых БД, раннер, корень принятого состояния."""
+"""Проверка тестовой среды.
+
+Целевая БД, перечень тестовых БД, Liquibase с драйвером и корень принятого состояния.
+"""
 
 from __future__ import annotations
 
-import dataclasses
 from collections.abc import Callable, Mapping
+from pathlib import Path
 
-from forge.operation.application.environment import EnvironmentCheck
+from forge.shared.application.environment import EnvironmentCheck
 from forge.shared.application.settings import (
     DatabaseCredentials,
     DatabaseUnavailableError,
-    RunnerUnavailableError,
+    LiquibaseUnavailableError,
     SettingsUnavailableError,
 )
 from forge.shared.domain.target_database import DatabaseNotAllowedError
+from forge.shared.infrastructure.liquibase import (
+    Runner,
+    driver_path,
+    require_liquibase,
+    run_liquibase,
+)
 from forge.shared.infrastructure.postgres import PostgresConnector
-from forge.shared.infrastructure.runner import RunnerCall, call_runner, runner_settings
 from forge.shared.infrastructure.settings import EnvironmentSettings
-
-# Цель раннера без побочных эффектов: проверяет, что раннер жив и принимает токен
-RUNNER_PROBE_TARGET = "help"
-RUNNER_PROBE_TIMEOUT = 30.0
 
 
 class EnvironmentProbe:
-    """Реализация проверки среды по переменным окружения процесса."""
+    """Реализация проверки среды по переменным окружения процесса.
+
+    Драйвер Liquibase ищется в `.forge/lib/` каталога `project_root` — корня проекта, из которого
+    запущен CLI.
+    """
 
     def __init__(
         self,
         environment: Mapping[str, str],
+        project_root: Path,
         connector: Callable[[DatabaseCredentials], PostgresConnector] = PostgresConnector,
-        call: RunnerCall = call_runner,
+        run: Runner = run_liquibase,
     ) -> None:
         self._env = environment
+        self._root = project_root
         self._settings = EnvironmentSettings(environment)
         self._connector = connector
-        self._call = call
+        self._run = run
 
     def check(self) -> tuple[EnvironmentCheck, ...]:
-        return (self._database(), self._allowlist(), self._runner(), self._accepted())
+        return (self._database(), self._allowlist(), self._liquibase(), self._accepted())
 
     def _database(self) -> EnvironmentCheck:
         try:
@@ -57,22 +67,13 @@ class EnvironmentProbe:
             return EnvironmentCheck("allowlist", False, str(error))
         return EnvironmentCheck("allowlist", True, f"{target} входит в перечень тестовых")
 
-    def _runner(self) -> EnvironmentCheck:
+    def _liquibase(self) -> EnvironmentCheck:
         try:
-            settings = runner_settings(self._env)
-            if settings is None:
-                return EnvironmentCheck(
-                    "runner",
-                    False,
-                    "раннер не настроен: не заданы AGENT_RUNNER_URL и AGENT_RUNNER_TOKEN",
-                )
-            probe = dataclasses.replace(
-                settings, timeout=min(settings.timeout, RUNNER_PROBE_TIMEOUT)
-            )
-            self._call(probe, RUNNER_PROBE_TARGET)
-        except (SettingsUnavailableError, RunnerUnavailableError) as error:
-            return EnvironmentCheck("runner", False, str(error))
-        return EnvironmentCheck("runner", True, f"раннер {settings.url} отвечает")
+            version = require_liquibase(self._root, self._env, self._run)
+        except LiquibaseUnavailableError as error:
+            return EnvironmentCheck("liquibase", False, str(error))
+        driver = driver_path(self._root, self._env).name
+        return EnvironmentCheck("liquibase", True, f"Liquibase {version}, драйвер {driver}")
 
     def _accepted(self) -> EnvironmentCheck:
         # Существование каталога не проверяется: до первого `forge close` корня нет

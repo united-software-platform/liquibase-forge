@@ -1,4 +1,4 @@
-"""Беклог операции в формате `templates/forge-model.md` для тестов Миграции."""
+"""Беклог операции в формате шаблона `forge-model` плагина для тестов Миграции."""
 
 from __future__ import annotations
 

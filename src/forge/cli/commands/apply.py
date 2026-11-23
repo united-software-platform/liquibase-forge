@@ -14,11 +14,10 @@ from forge.migration.application.apply_changelog.use_case import (
     ApplyChangelogUseCaseInterface,
 )
 from forge.migration.application.liquibase_gateway import GatewayUnavailableError
-from forge.migration.infrastructure.runner_gateway import RunnerLiquibaseGateway
+from forge.migration.infrastructure.liquibase_gateway import ProcessLiquibaseGateway
 from forge.shared.application.settings import SettingsUnavailableError
 from forge.shared.domain.target_database import DatabaseNotAllowedError
 from forge.shared.infrastructure.json_result_writer import JsonResultWriter
-from forge.shared.infrastructure.runner import runner_settings
 from forge.shared.infrastructure.settings import EnvironmentSettings
 
 
@@ -30,9 +29,9 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
 
 
 def build_use_case() -> ApplyChangelogUseCaseInterface:
-    """Собрать сценарий: настройки из окружения, шлюз через раннер, корень — текущий каталог."""
+    """Собрать сценарий: настройки из окружения, шлюз в процессе CLI, корень — текущий каталог."""
     settings = EnvironmentSettings(os.environ)
-    gateway = RunnerLiquibaseGateway(Path.cwd(), runner_settings(os.environ))
+    gateway = ProcessLiquibaseGateway(Path.cwd(), settings, os.environ)
     return ApplyChangelogUseCase(settings, gateway, JsonResultWriter())
 
 

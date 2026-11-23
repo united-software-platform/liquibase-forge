@@ -49,7 +49,7 @@ def test_success_writes_result_next_to_changelog(tmp_path: Path) -> None:
     assert writer.documents[result] == {
         "seed": str(tmp_path / "attempt-1" / "seed.yaml"),
         "changelog": str(tmp_path / "attempt-1" / "changelog.yaml"),
-        "database": "lbfr-db-test:5432/t_0001",
+        "database": "localhost:5432/t_0001",
         "verdict": "success",
         "discrepancies": [],
     }

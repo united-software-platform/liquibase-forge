@@ -1,4 +1,4 @@
-"""Генерация значения и перечни значений через раннер на `lbfr-db-test`: накат, сверка, откат."""
+"""Генерация значения и перечни значений нативным Liquibase: накат, сверка, откат."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from tests.conftest import TestDatabase
 from tests.integration.migration_support import STAMP, forge, write_model
 from tests.migration.operation_backlog import write_operation
 
-pytestmark = [pytest.mark.integration, pytest.mark.usefixtures("runner_configured")]
+pytestmark = [pytest.mark.integration, pytest.mark.usefixtures("liquibase_ready")]
 
 BASE_STAMP = "20261001-090000"
 

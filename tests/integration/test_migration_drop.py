@@ -1,4 +1,4 @@
-"""Удаления через раннер на `lbfr-db-test`: накат, сверка и откат удалённых объектов."""
+"""Удаления с нативным Liquibase на сервере тестов: накат, сверка и откат удалённых объектов."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from tests.conftest import TestDatabase
 from tests.integration.migration_support import STAMP, forge, write_model
 from tests.migration.operation_backlog import write_operation
 
-pytestmark = [pytest.mark.integration, pytest.mark.usefixtures("runner_configured")]
+pytestmark = [pytest.mark.integration, pytest.mark.usefixtures("liquibase_ready")]
 
 # Принятое состояние накатывается под другим штампом: его записи журнала не смешиваются
 # с записями попытки, как у операций, принятых раньше

@@ -26,7 +26,7 @@ from tests.migration.fakes import (
 def _rollback(
     db: FakeDatabase,
     verdict: str | None = "failure",
-    allowlist: str = "lbfr-db-test:5432/*",
+    allowlist: str = "localhost:5432/*",
     discard: bool = False,
     **options: str,
 ) -> tuple[RollbackAttemptOutput, FakeWriter]:
@@ -204,7 +204,7 @@ def test_database_outside_allowlist_is_refused_before_any_change() -> None:
     db.apply_attempt(3)
 
     with pytest.raises(DatabaseNotAllowedError):
-        _rollback(db, allowlist="lbfr-db:5432/forge")
+        _rollback(db, allowlist="other-db:5432/forge")
 
     assert db.calls == []
 
@@ -214,7 +214,7 @@ def test_unavailable_gateway_propagates() -> None:
     db.apply_attempt(3)
 
     def unavailable(changelog: str, database: TargetDatabase, count: int) -> GatewayResult:
-        raise GatewayUnavailableError("runner_unavailable", "раннер недоступен")
+        raise GatewayUnavailableError("liquibase_unavailable", "Liquibase не найден")
 
     db.rollback = unavailable  # type: ignore[method-assign]
 

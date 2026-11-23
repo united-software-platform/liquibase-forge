@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import os
+from pathlib import Path
 
 from forge.cli.commands.operation_support import operation_payload, read_repository
 from forge.cli.contract import ExitCode, emit, environment_error
@@ -30,7 +31,9 @@ def register(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) ->
 
 
 def build_use_case() -> GetStatusUseCaseInterface:
-    return GetStatusUseCase(read_repository(), EnvironmentProbe(os.environ), OperationFactory())
+    return GetStatusUseCase(
+        read_repository(), EnvironmentProbe(os.environ, Path.cwd()), OperationFactory()
+    )
 
 
 def run(args: argparse.Namespace, use_case: GetStatusUseCaseInterface | None = None) -> int:

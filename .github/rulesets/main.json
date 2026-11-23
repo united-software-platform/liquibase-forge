@@ -32,7 +32,7 @@
         "strict_required_status_checks_policy": false,
         "required_status_checks": [
           {
-            "context": "Линтер, форматирование, типы, тесты, Makefile",
+            "context": "Линтер, форматирование, типы, тесты",
             "integration_id": 15368
           }
         ]

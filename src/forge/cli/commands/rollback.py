@@ -16,6 +16,7 @@ from forge.migration.application.rollback_attempt.use_case import (
     RollbackDependencies,
 )
 from forge.migration.infrastructure.liquibase_changelog import LiquibaseYamlChangelogReader
+from forge.migration.infrastructure.liquibase_gateway import ProcessLiquibaseGateway
 from forge.migration.infrastructure.operation_record_reader import (
     FrontmatterOperationRecordReader,
 )
@@ -25,7 +26,6 @@ from forge.migration.infrastructure.postgres import (
     PsycopgRowProbe,
     PsycopgSchemaProbe,
 )
-from forge.migration.infrastructure.runner_gateway import RunnerLiquibaseGateway
 from forge.shared.application.settings import (
     DatabaseUnavailableError,
     SettingsUnavailableError,
@@ -33,7 +33,6 @@ from forge.shared.application.settings import (
 from forge.shared.domain.target_database import DatabaseNotAllowedError
 from forge.shared.infrastructure.json_result_writer import JsonResultWriter
 from forge.shared.infrastructure.postgres import PostgresConnector
-from forge.shared.infrastructure.runner import runner_settings
 from forge.shared.infrastructure.settings import EnvironmentSettings
 
 ATTEMPTS = (1, 2, 3)
@@ -54,7 +53,7 @@ def accepted_master(settings: EnvironmentSettings) -> str:
 
 
 def build_use_case(accepted_master_path: str | None = None) -> RollbackAttemptUseCaseInterface:
-    """Собрать сценарий: окружение процесса, `psycopg`, шлюз через раннер."""
+    """Собрать сценарий: окружение процесса, `psycopg`, шлюз в процессе CLI."""
     settings = EnvironmentSettings(os.environ)
     master = accepted_master_path or accepted_master(settings)
     connector = PostgresConnector(settings.credentials())
@@ -67,7 +66,7 @@ def build_use_case(accepted_master_path: str | None = None) -> RollbackAttemptUs
             schema=PsycopgSchemaProbe(connector),
             rows=PsycopgRowProbe(connector),
             recreator=PsycopgDatabaseRecreator(connector),
-            gateway=RunnerLiquibaseGateway(Path.cwd(), runner_settings(os.environ)),
+            gateway=ProcessLiquibaseGateway(Path.cwd(), settings, os.environ),
             writer=JsonResultWriter(),
         ),
         master,

@@ -151,7 +151,7 @@ def test_unconfirmed_rollback_keeps_status(tmp_path: Path) -> None:
 def test_environment_error_keeps_status(tmp_path: Path) -> None:
     path = _operation(tmp_path, "running", "success", started=1)
     before = path.read_text(encoding="utf-8")
-    discarder = FakeDiscarder(error=GatewayUnavailableError("runner_unavailable", "нет ответа"))
+    discarder = FakeDiscarder(error=GatewayUnavailableError("liquibase_unavailable", "нет ответа"))
 
     with pytest.raises(GatewayUnavailableError):
         _abandon(tmp_path, path, discarder)

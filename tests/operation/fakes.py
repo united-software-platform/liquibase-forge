@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from forge.operation.application.environment import EnvironmentCheck
+from forge.shared.application.environment import EnvironmentCheck
 
 
 class FakeProbe:

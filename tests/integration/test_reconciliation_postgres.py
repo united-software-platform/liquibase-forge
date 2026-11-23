@@ -1,4 +1,4 @@
-"""Интроспекция каталога и журнала Liquibase на `lbfr-db-test`."""
+"""Интроспекция каталога и журнала Liquibase на сервере тестов."""
 
 from __future__ import annotations
 

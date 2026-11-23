@@ -1,4 +1,4 @@
-"""Сверка seed на `lbfr-db-test`: все десять типов без расхождений и виды расхождений строк."""
+"""Сверка seed на сервере тестов: все десять типов без расхождений и виды расхождений строк."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from tests.conftest import TestDatabase
 from tests.integration.migration_support import forge, write_model
 from tests.migration.operation_backlog import write_operation
 
-pytestmark = [pytest.mark.integration, pytest.mark.usefixtures("runner_configured")]
+pytestmark = [pytest.mark.integration, pytest.mark.usefixtures("liquibase_ready")]
 
 FIRST, SECOND = "20261025-101500", "20261026-090000"
 

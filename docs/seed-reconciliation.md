@@ -130,7 +130,7 @@ forge reconcile-seed --seed <каталог попытки>/seed.yaml --changelo
 {
   "seed": "backlog/forge-seed/20261025-101500/attempt-1/seed.yaml",
   "changelog": "backlog/forge-seed/20261025-101500/attempt-1/changelog.yaml",
-  "database": "lbfr-db-test:5432/t_0001",
+  "database": "localhost:5432/t_0001",
   "verdict": "failure",
   "discrepancies": [
     {
@@ -191,3 +191,4 @@ forge reconcile-seed --seed <каталог попытки>/seed.yaml --changelo
 | Версия | Дата | Задача | Агент | Модель | Описание изменений |
 |--------|------|--------|-------|--------|--------------------|
 | 1.0.0 | 2026-10-25 | LBFR-028, OpenSpec change `add-seed-reconciliation` | Claude Code | Claude Opus 5.5 | Начальное создание: команда `forge reconcile-seed` с кодами и видами ошибок, состав сравнения строк и журнала, нормализация значений из БД, виды расхождений `row_missing`, `row_unexpected`, `value_mismatch` и поле `key`, порядок расхождений, пример `reconcile.json`, ограничения и допущения |
+| 1.0.1 | 2026-11-24 | LBFR-032, OpenSpec change `replace-kit-with-tessera-and-mise` | ZCode | GLM-5.4 | адрес базы в примере `reconcile.json` приведён к общему экземпляру PostgreSQL workspace |

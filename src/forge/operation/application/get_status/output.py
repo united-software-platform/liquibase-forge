@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from forge.operation.application.environment import EnvironmentCheck
 from forge.operation.application.views import OperationView
+from forge.shared.application.environment import EnvironmentCheck
 
 
 @dataclass(frozen=True)

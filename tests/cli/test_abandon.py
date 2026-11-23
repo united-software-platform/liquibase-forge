@@ -51,7 +51,7 @@ def _rollback(db: FakeDatabase) -> Callable[[], RollbackAttemptUseCaseInterface]
         return RollbackAttemptUseCase(
             RollbackDependencies(
                 operations=FrontmatterOperationRecordReader(),
-                settings=FakeSettings("lbfr-db-test:5432/*"),
+                settings=FakeSettings("localhost:5432/*"),
                 changelogs=db,
                 journal=db,
                 schema=db,
@@ -179,7 +179,7 @@ def test_unconfirmed_rollback_is_refused(
     assert path.read_text(encoding="utf-8") == before
 
 
-def test_unavailable_runner_is_environment_error(
+def test_unavailable_liquibase_is_environment_error(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
@@ -191,14 +191,14 @@ def test_unavailable_runner_is_environment_error(
     db.apply_attempt(3)
 
     def unavailable(changelog: str, target: TargetDatabase, count: int) -> GatewayResult:
-        raise GatewayUnavailableError("runner_unavailable", "раннер не отвечает")
+        raise GatewayUnavailableError("liquibase_unavailable", "Liquibase не отвечает")
 
     db.rollback = unavailable  # type: ignore[method-assign]
 
     code, payload = _run(tmp_path, capsys, monkeypatch, path, _rollback(db))
 
     assert code == 2
-    assert payload["error"]["kind"] == "runner_unavailable"
+    assert payload["error"]["kind"] == "liquibase_unavailable"
     assert path.read_text(encoding="utf-8") == before
 
 

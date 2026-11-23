@@ -16,6 +16,17 @@ from forge.shared.domain.target_database import (
 
 ACCEPTED_DIR = "FORGE_ACCEPTED_DIR"
 DEFAULT_ACCEPTED_DIR = "db"
+# Адрес сервера PostgreSQL по умолчанию: общий экземпляр workspace слушает localhost, его порт
+# каскад mise задаёт переменной PG_PORT; вне workspace — стандартный порт. Умолчание живёт
+# в инструменте, а не дублируется в конфигурации проекта
+DEFAULT_HOST = "localhost"
+DEFAULT_PORT = "5432"
+CASCADE_PORT = "PG_PORT"
+
+
+def server_port(environment: Mapping[str, str]) -> str:
+    """Порт сервера PostgreSQL: `PG_PORT` из каскада mise, если задан, иначе `5432`."""
+    return environment.get(CASCADE_PORT, "").strip() or DEFAULT_PORT
 
 
 class EnvironmentSettings:
@@ -25,8 +36,9 @@ class EnvironmentSettings:
         self._env = environment
 
     def target(self) -> TargetDatabase:
-        host = self._required("FORGE_DB_HOST")
-        port = self._required("FORGE_DB_PORT")
+        """Целевая БД: хост по умолчанию `localhost`, порт — из каскада, иначе `5432`."""
+        host = self._env.get("FORGE_DB_HOST", "").strip() or DEFAULT_HOST
+        port = self._env.get("FORGE_DB_PORT", "").strip() or server_port(self._env)
         if not port.isdigit():
             raise SettingsUnavailableError(f"FORGE_DB_PORT должен быть номером порта: {port!r}")
         return TargetDatabase(host, int(port), self._required("FORGE_DB_NAME"))

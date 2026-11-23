@@ -1,5 +1,5 @@
-"""Workflow проверок `.github/workflows/checks.yml`: триггеры, права, совпадение с CONTRIBUTING.md
-и закрепление версий действий.
+"""Workflow проверок `.github/workflows/checks.yml`: триггеры, права, совпадение с CONTRIBUTING.md,
+отсутствие Docker и закрепление версий действий.
 
 Перечень проверок живёт в двух местах — в разделе «Проверки» `CONTRIBUTING.md` для локального
 прогона и в шагах workflow для CI. Тест сравнивает их, чтобы новая проверка не попала только
@@ -20,11 +20,13 @@ RELEASE_WORKFLOW = ROOT / ".github" / "workflows" / "release.yml"
 CONTRIBUTING = ROOT / "CONTRIBUTING.md"
 INTEGRATION_ENV = ROOT / "tools" / "ci" / "integration-env.sh"
 
-ENV_COMMAND = "sh tools/ci/integration-env.sh"
-LOGS_COMMAND = "cat .forge/ci/runner.log; docker compose logs lbfr-db-test || true"
+ENV_COMMAND = "mise exec -- sh tools/ci/integration-env.sh"
+LOGS_COMMAND = (
+    "cat .forge/ci/postgresql.log; sudo journalctl -u postgresql --no-pager -n 200 || true"
+)
 
-# Нужны только CI: локально окружение uv уже есть, окружение интеграционных тестов поднимает
-# make forge-env-up вместе с раннером на хосте, а журналы печатаются только при сбое job'а
+# Нужны только CI: локально окружение uv уже есть, окружение интеграционных тестов поднимают
+# задачи mise `env-up` и `forge-env-up`, а журналы печатаются только при сбое job'а
 CI_ONLY = {"uv sync --frozen", ENV_COMMAND, LOGS_COMMAND}
 
 
@@ -64,20 +66,12 @@ def _workflow_commands() -> set[str]:
 
 
 def _contributing_commands() -> set[str]:
-    """Команды блока `bash` раздела «Проверки» без комментариев.
-
-    `uv run pytest <каталог>` — частный случай полного `uv run pytest` и им покрыт.
-    """
+    """Команды блока `bash` раздела «Проверки» без комментариев."""
     text = CONTRIBUTING.read_text(encoding="utf-8")
     section = text.split("\n## Проверки\n", 1)[1].split("\n## ", 1)[0]
     block = re.search(r"```bash\n(.*?)```", section, re.DOTALL)
     assert block is not None, "в разделе «Проверки» нет блока bash"
-    commands = {line.split("#", 1)[0].strip() for line in block.group(1).splitlines()}
-    return {
-        "uv run pytest" if command.startswith("uv run pytest ") else command
-        for command in commands
-        if command
-    }
+    return {line.split("#", 1)[0].strip() for line in block.group(1).splitlines()} - {""}
 
 
 # --- Триггеры и права ------------------------------------------------------------------------
@@ -118,7 +112,7 @@ def test_no_check_is_allowed_to_fail() -> None:
 
 
 def test_integration_environment_comes_before_tests() -> None:
-    assert _run_index(ENV_COMMAND) < _run_index("uv run pytest")
+    assert _run_index(ENV_COMMAND) < _run_index("mise run test")
     assert "if" not in _steps()[_run_index(ENV_COMMAND)]
 
 
@@ -137,9 +131,14 @@ def test_integration_tests_are_required() -> None:
     assert '>> "$GITHUB_ENV"' in script
 
 
-def test_makefile_check_uses_norm() -> None:
-    assert "sh tools/make-lint/check.sh" in _workflow_commands()
-    assert not any("--max-lines" in command for command in _workflow_commands())
+def test_checks_run_through_mise() -> None:
+    assert all(command.startswith("mise run ") for command in _workflow_commands())
+
+
+def test_workflow_needs_neither_docker_nor_runner() -> None:
+    texts = (WORKFLOW.read_text(encoding="utf-8"), INTEGRATION_ENV.read_text(encoding="utf-8"))
+
+    assert not any(re.search(r"docker|runner|make ", text, re.IGNORECASE) for text in texts)
 
 
 # --- Версии действий -------------------------------------------------------------------------
@@ -154,9 +153,10 @@ def test_checkout_version_is_same_in_both_workflows() -> None:
     assert checks == release
 
 
-def test_setup_uv_is_pinned_to_exact_release() -> None:
-    # С v8 у setup-uv нет плавающих тегов vN и vN.M: укороченная версия упала бы уже на GitHub
-    refs = _action_refs(WORKFLOW, "astral-sh/setup-uv")
+def test_mise_action_is_pinned_to_exact_release() -> None:
+    # Плавающий тег принёс бы в проверки непроверенное обновление: как и остальные действия,
+    # mise закрепляется точным релизом
+    refs = _action_refs(WORKFLOW, "jdx/mise-action")
 
     assert len(refs) == 1
     assert all(re.fullmatch(r"v\d+\.\d+\.\d+", ref) for ref in refs)

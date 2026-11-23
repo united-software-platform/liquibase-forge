@@ -32,7 +32,7 @@ def _rollback(
     capsys: pytest.CaptureFixture[str],
     db: FakeDatabase,
     verdict: str = "failure",
-    allowlist: str = "lbfr-db-test:5432/*",
+    allowlist: str = "localhost:5432/*",
 ) -> tuple[int, dict[str, Any], Path]:
     operation = write_operation(tmp_path, verdicts=(verdict, "null", "null"))
     use_case = RollbackAttemptUseCase(
@@ -94,24 +94,24 @@ def test_database_outside_allowlist(tmp_path: Path, capsys: pytest.CaptureFixtur
     db = FakeDatabase()
     db.apply_attempt(3)
 
-    code, payload, result = _rollback(tmp_path, capsys, db, allowlist="lbfr-db:5432/forge")
+    code, payload, result = _rollback(tmp_path, capsys, db, allowlist="other-db:5432/forge")
 
     assert (code, payload["error"]["kind"]) == (2, "database_not_allowed")
     assert not result.exists()
 
 
-def test_runner_unavailable(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_liquibase_unavailable(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     db = FakeDatabase()
     db.apply_attempt(3)
 
     def unavailable(changelog: str, database: TargetDatabase, count: int) -> GatewayResult:
-        raise GatewayUnavailableError("runner_unavailable", "раннер недоступен")
+        raise GatewayUnavailableError("liquibase_unavailable", "Liquibase не найден")
 
     db.rollback = unavailable  # type: ignore[method-assign]
 
     code, payload, _ = _rollback(tmp_path, capsys, db)
 
-    assert (code, payload["error"]["kind"]) == (2, "runner_unavailable")
+    assert (code, payload["error"]["kind"]) == (2, "liquibase_unavailable")
 
 
 def test_attempt_must_be_one_to_three(capsys: pytest.CaptureFixture[str]) -> None:

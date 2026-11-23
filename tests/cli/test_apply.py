@@ -21,7 +21,7 @@ def _apply(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
     gateway: FakeGateway,
-    allowlist: str = "lbfr-db-test:5432/*",
+    allowlist: str = "localhost:5432/*",
 ) -> tuple[int, dict[str, Any], Path]:
     changelog = tmp_path / "attempt-1" / "changelog.yaml"
     use_case = ApplyChangelogUseCase(FakeSettings(allowlist), gateway, JsonResultWriter())
@@ -36,7 +36,7 @@ def test_successful_apply(tmp_path: Path, capsys: pytest.CaptureFixture[str]) ->
 
     assert code == 0
     assert payload["result"] == str(result)
-    assert payload["database"] == "lbfr-db-test:5432/t_0001"
+    assert payload["database"] == "localhost:5432/t_0001"
     assert json.loads(result.read_text(encoding="utf-8"))["exit_code"] == 0
 
 
@@ -50,27 +50,28 @@ def test_liquibase_failure(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -
 def test_database_outside_allowlist(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     gateway = FakeGateway(0)
 
-    code, payload, result = _apply(tmp_path, capsys, gateway, allowlist="lbfr-db:5432/forge")
+    code, payload, result = _apply(tmp_path, capsys, gateway, allowlist="other-db:5432/forge")
 
     assert code == 2
     assert payload["error"]["kind"] == "database_not_allowed"
     assert gateway.calls == [] and not result.exists()
 
 
-def test_runner_unavailable(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    gateway = FakeGateway(GatewayUnavailableError("runner_unavailable", "раннер недоступен"))
+def test_liquibase_unavailable(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    gateway = FakeGateway(GatewayUnavailableError("liquibase_unavailable", "Liquibase не найден"))
 
     code, payload, result = _apply(tmp_path, capsys, gateway)
 
     assert code == 2
-    assert payload["error"]["kind"] == "runner_unavailable"
+    assert payload["error"]["kind"] == "liquibase_unavailable"
     assert not result.exists()
 
 
 def test_missing_environment(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    monkeypatch.delenv("FORGE_DB_HOST", raising=False)
+    # Хост и порт имеют умолчания, поэтому признак незаданной среды — отсутствие имени базы
+    monkeypatch.delenv("FORGE_DB_NAME", raising=False)
 
     code = main(["apply", "--changelog", "c.yaml"])
 

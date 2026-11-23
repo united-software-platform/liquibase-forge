@@ -21,7 +21,7 @@ from forge.shared.domain.target_database import TargetDatabase
 from forge.shared.infrastructure.postgres import PostgresConnector
 from tests.seeding.support import CODE, ORDER_STATUS, model, table
 
-DATABASE = TargetDatabase("lbfr-db-test", 5432, "forge")
+DATABASE = TargetDatabase("localhost", 5432, "forge")
 MSK = timezone(timedelta(hours=3))
 
 

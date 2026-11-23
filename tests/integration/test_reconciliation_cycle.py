@@ -1,4 +1,4 @@
-"""Сквозная сверка через раннер на `lbfr-db-test`: накат модели-примера и виды расхождений."""
+"""Сквозная сверка нативным Liquibase: накат модели-примера и виды расхождений."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ import pytest
 from tests.conftest import TestDatabase
 from tests.integration.migration_support import STAMP, forge
 
-pytestmark = [pytest.mark.integration, pytest.mark.usefixtures("runner_configured")]
+pytestmark = [pytest.mark.integration, pytest.mark.usefixtures("liquibase_ready")]
 
 EXAMPLE = Path(__file__).resolve().parents[1] / "fixtures" / "model" / "example.yaml"
 

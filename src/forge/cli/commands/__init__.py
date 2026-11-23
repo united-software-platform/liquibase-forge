@@ -11,6 +11,7 @@ from forge.cli.commands import (
     abandon,
     apply,
     close,
+    env,
     generate,
     generate_seed,
     reconcile,
@@ -37,6 +38,7 @@ COMMANDS = (
     stop,
     resume,
     close,
+    env,
     abandon,
     report,
 )

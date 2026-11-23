@@ -16,8 +16,8 @@ class DatabaseUnavailableError(Exception):
     """К целевой БД или серверу не подключиться либо запрос не выполнен."""
 
 
-class RunnerUnavailableError(Exception):
-    """Раннер на хосте не отвечает или отклонил цель."""
+class LiquibaseUnavailableError(Exception):
+    """Нативный Liquibase не найден в `PATH`, не отвечает или драйвер PostgreSQL не загружен."""
 
 
 @dataclass(frozen=True)

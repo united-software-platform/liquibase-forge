@@ -3,11 +3,13 @@
 Логика проверяется на тексте сценария: тест берёт скрипт шага разбора версии и исполняет его
 через `sh` с временными `VERSION` и `GITHUB_OUTPUT` — ровно тот код, что работает в GitHub.
 Гейт задач выпуска исполняется так же, а `gh` в `PATH` подменяет заглушка с готовыми ответами.
-Гейт ключа развёртывания исполняется с пустым и непустым значением секрета.
+Гейт ключа развёртывания исполняется с пустым и непустым значением секрета, гейт версии плагина —
+на копиях манифестов с заданными номерами.
 """
 
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -17,6 +19,12 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = ROOT / ".github" / "workflows" / "release.yml"
+# Носители версии плагина, которые сверяет гейт: путь — где в документе номер плагина forge
+PLUGIN_CARRIERS = (
+    "plugins/forge-plugin/.zcode-plugin/plugin.json",
+    "plugins/forge-plugin/.claude-plugin/plugin.json",
+    ".claude-plugin/marketplace.json",
+)
 
 
 def _workflow() -> dict[Any, Any]:
@@ -218,7 +226,7 @@ def test_issues_gate_between_version_and_write() -> None:
     gate = _step_index("Нет milestone")
     step = _steps()[gate]
 
-    assert _steps()[gate - 1].get("id") == "version"
+    assert _steps()[gate - 1].get("name") == "Гейт версии плагина"
     assert gate < _step_index("git status --porcelain -- VERSION") < _step_index("git commit")
     assert "${{" not in step["run"]
     assert step["env"]["NEXT"] == "${{ steps.version.outputs.next }}"
@@ -264,6 +272,72 @@ def test_issues_gate_stops_when_api_fails(tmp_path: Path) -> None:
 
     assert result.returncode != 0
     assert "HTTP 403" in result.stderr
+
+
+# --- Гейт версии плагина ----------------------------------------------------------------------
+
+
+def _plugin_gate(tmp_path: Path, **versions: str) -> subprocess.CompletedProcess[str]:
+    """Исполнить гейт версии плагина для номера 0.3.0 на копиях носителей.
+
+    Ключ `versions` — носитель с заменённым номером; остальные копируются с номером 0.3.0.
+    """
+    script = _steps()[_step_index("а выпускается v")]["run"]
+    for name in PLUGIN_CARRIERS:
+        document = json.loads((ROOT / name).read_text(encoding="utf-8"))
+        entries = document.get("plugins", [document])
+        [plugin] = [entry for entry in entries if entry["name"] == "forge-plugin"]
+        plugin["version"] = versions.get(name, "0.3.0")
+        target = tmp_path / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(json.dumps(document, ensure_ascii=False), encoding="utf-8")
+    return subprocess.run(
+        ["sh", "-e", "-c", script],
+        cwd=tmp_path,
+        env={"PATH": "/usr/bin:/bin", "NEXT": "0.3.0"},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def test_plugin_version_gate_comes_after_version_and_before_issues_gate() -> None:
+    gate = _step_index("а выпускается v")
+    step = _steps()[gate]
+
+    assert _steps()[gate - 1].get("id") == "version"
+    assert gate < _step_index("Нет milestone")
+    assert "${{" not in step["run"]
+    assert step["env"]["NEXT"] == "${{ steps.version.outputs.next }}"
+    # Гейт только читает носители: до записи VERSION дело не доходит
+    assert all("git " not in line for line in step["run"].splitlines())
+
+
+def test_plugin_version_gate_passes_when_carriers_match(tmp_path: Path) -> None:
+    result = _plugin_gate(tmp_path)
+
+    assert result.returncode == 0, result.stderr
+    assert result.stderr == ""
+    assert len(result.stdout.splitlines()) == len(PLUGIN_CARRIERS)
+
+
+@pytest.mark.parametrize("carrier", PLUGIN_CARRIERS)
+def test_plugin_version_gate_stops_on_lagging_carrier(tmp_path: Path, carrier: str) -> None:
+    result = _plugin_gate(tmp_path, **{carrier: "0.2.0"})
+
+    assert result.returncode != 0
+    assert f"{carrier}: версия плагина 0.2.0, а выпускается v0.3.0" in result.stderr
+    assert "подготовительном изменении" in result.stderr
+
+
+def test_plugin_version_gate_reports_every_lagging_carrier(tmp_path: Path) -> None:
+    first, second, _ = PLUGIN_CARRIERS
+    result = _plugin_gate(tmp_path, **{first: "0.1.0", second: "0.2.0"})
+
+    assert result.returncode != 0
+    assert len(result.stderr.splitlines()) == 2
+    assert "0.1.0" in result.stderr
+    assert "0.2.0" in result.stderr
 
 
 # --- Повышение номера ------------------------------------------------------------------------

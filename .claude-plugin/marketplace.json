@@ -1,0 +1,27 @@
+{
+  "name": "liquibase-forge",
+  "owner": {
+    "name": "usp"
+  },
+  "plugins": [
+    {
+      "name": "forge-plugin",
+      "source": "./plugins/forge-plugin",
+      "version": "0.5.0",
+      "description": "Навык forge: модель данных PostgreSQL и справочники по намерению LLM через CLI Liquibase Forge — накат, сверка и откат с принятием в проект",
+      "displayName": "Liquibase Forge"
+    },
+    {
+      "name": "backlog",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/united-software-platform/formular.git",
+        "path": "plugin/backlog",
+        "ref": "main"
+      },
+      "version": "1.4.0",
+      "description": "Порождение и исполнение беклогов операций — зависимость навыка forge",
+      "displayName": "Backlog (formular)"
+    }
+  ]
+}

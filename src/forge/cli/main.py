@@ -10,31 +10,16 @@ from __future__ import annotations
 import argparse
 import sys
 from collections.abc import Callable, Sequence
-from typing import NoReturn
 
 from forge.cli.commands import COMMANDS
 from forge.cli.contract import ExitCode, emit, error_payload
-
-
-class UsageError(Exception):
-    """Ошибка разбора аргументов командной строки."""
-
-    def __init__(self, message: str, usage: str) -> None:
-        super().__init__(message)
-        self.usage = usage
-
-
-class _Parser(argparse.ArgumentParser):
-    """Парсер, который сообщает об ошибке исключением, а не печатью и выходом."""
-
-    def error(self, message: str) -> NoReturn:
-        raise UsageError(message, self.format_usage().strip())
+from forge.cli.parser import Parser, UsageError
 
 
 def build_parser() -> argparse.ArgumentParser:
     """Собрать парсер: каждая команда регистрирует свою подкоманду и обработчик."""
-    parser = _Parser(prog="forge", add_help=False)
-    subparsers = parser.add_subparsers(dest="command", required=True, parser_class=_Parser)
+    parser = Parser(prog="forge", add_help=False)
+    subparsers = parser.add_subparsers(dest="command", required=True, parser_class=Parser)
     for command in COMMANDS:
         command.register(subparsers)
     return parser

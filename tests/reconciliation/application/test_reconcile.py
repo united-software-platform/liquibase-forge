@@ -29,7 +29,7 @@ def _reconcile(
     db: FakeReconcileDatabase,
     writer: FakeWriter,
     tables: str = CUSTOMER,
-    allowlist: str = "lbfr-db-test:5432/*",
+    allowlist: str = "localhost:5432/*",
     changesets: FakeChangesets | None = None,
 ) -> ReconcileOutput:
     model = tmp_path / "model.yaml"
@@ -58,7 +58,7 @@ def test_success(tmp_path: Path) -> None:
     assert (document["verdict"], document["discrepancies"], document["database"]) == (
         "success",
         [],
-        "lbfr-db-test:5432/t_0001",
+        "localhost:5432/t_0001",
     )
 
 
@@ -79,7 +79,7 @@ def test_database_outside_allowlist_is_not_connected(tmp_path: Path) -> None:
     db, writer = FakeReconcileDatabase(schema(customer()), EXECUTED), FakeWriter()
 
     with pytest.raises(DatabaseNotAllowedError):
-        _reconcile(tmp_path, db, writer, allowlist="lbfr-db:5432/forge")
+        _reconcile(tmp_path, db, writer, allowlist="other-db:5432/forge")
 
     assert not db.connected and writer.documents == {}
 

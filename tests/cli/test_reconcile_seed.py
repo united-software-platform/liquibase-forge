@@ -60,7 +60,7 @@ def test_success(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     assert payload == {
         "seed": str(tmp_path / "attempt-1" / "seed.yaml"),
         "changelog": str(tmp_path / "attempt-1" / "changelog.yaml"),
-        "database": "lbfr-db-test:5432/t_0001",
+        "database": "localhost:5432/t_0001",
         "verdict": "success",
         "discrepancies": [],
     }
@@ -254,7 +254,7 @@ def test_database_outside_allowlist(
         "FORGE_DB_NAME": "forge",
         "FORGE_DB_USER": "forge",
         "FORGE_DB_PASSWORD": "secret",
-        "FORGE_TEST_DB_ALLOWLIST": "lbfr-db:5432/forge",
+        "FORGE_TEST_DB_ALLOWLIST": "other-db:5432/forge",
     }.items():
         monkeypatch.setenv(name, value)
 
