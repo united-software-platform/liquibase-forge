@@ -1,12 +1,11 @@
 {
-  "registry_version": "1.0.0",
-  "generated_at": "2026-11-25T03:06:27",
-  "profile": "full",
-  "mode": "project",
+  "registry_version": "2.0.0",
+  "generated_at": "2026-11-27T03:55:28",
+  "scope": "project",
   "components": [
-    {"name": "tessera", "source": "https://github.com/united-software-platform/tessera.git", "storage": "~/.local/share/tessera/tessera", "included": true, "present": true, "revision": "684f13e"},
+    {"name": "tessera", "source": "https://github.com/united-software-platform/tessera.git", "storage": "~/.local/share/tessera/tessera", "included": true, "present": true, "revision": "753fdff"},
     {"name": "formular", "source": "https://github.com/united-software-platform/formular.git", "storage": "~/.local/share/tessera/formular", "included": true, "present": true, "revision": "3fa5ef5"},
-    {"name": "mattpocock-skills", "source": "https://github.com/mattpocock/skills.git", "storage": "~/.local/share/tessera/mattpocock-skills", "included": true, "present": true, "revision": "d653911"}],
+    {"name": "mattpocock-skills", "source": "https://github.com/mattpocock/skills.git", "storage": "~/.local/share/tessera/mattpocock-skills", "included": true, "present": true, "revision": "6f7f783"}],
   "skill_dirs": [
     {"harness": "zcode", "dir": "./.agents/skills"},
     {"harness": "claude", "dir": "./.claude/skills"}],
@@ -92,8 +91,9 @@
     {"name": "environment", "type": "copy", "target": ".tessera/rules/environment.md", "source": "~/.local/share/tessera/tessera/plugins/tessera-plugin/rules/environment.md"},
     {"name": "git-rules", "type": "copy", "target": ".tessera/rules/git-rules.md", "source": "~/.local/share/tessera/tessera/plugins/tessera-plugin/rules/git-rules.md"},
     {"name": "project-docs-rules", "type": "copy", "target": ".tessera/rules/project-docs-rules.md", "source": "~/.local/share/tessera/tessera/plugins/tessera-plugin/rules/project-docs-rules.md"},
-    {"name": "reading-rules", "type": "copy", "target": ".tessera/rules/reading-rules.md", "source": "~/.local/share/tessera/tessera/plugins/tessera-plugin/rules/reading-rules.md"}]
+    {"name": "reading-rules", "type": "copy", "target": ".tessera/rules/reading-rules.md", "source": "~/.local/share/tessera/tessera/plugins/tessera-plugin/rules/reading-rules.md"},
+    {"name": "software-class-rules", "type": "copy", "target": ".tessera/rules/software-class-rules.md", "source": "~/.local/share/tessera/tessera/plugins/tessera-plugin/rules/software-class-rules.md"}]
   },
-  "entrypoint": {"path": "AGENTS.md", "type": "section", "marker_prefix": "<!-- delivery-tessera-", "stamp": "20261125030627"},
+  "entrypoint": {"path": "AGENTS.md", "type": "section", "marker_prefix": "<!-- delivery-tessera-", "stamp": "20261127035527"},
   "launcher": {"path": "~/.local/bin/backlog", "type": "wrapper", "included": true}
 }
